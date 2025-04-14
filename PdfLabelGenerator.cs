@@ -9,18 +9,21 @@ using Spectre.Console; // For console output
 
 namespace SimpleInventoryApp
 {
-    public class PdfLabelGenerator
+ public class PdfLabelGenerator
     {
         // Basic label dimensions and grid layout (adjust as needed)
         private const float LabelWidth = 2.0f; // inches
         private const float LabelHeight = 1.0f; // inches
         private const int ColumnsPerPage = 3;
-        private const int RowsPerPage = 5;
+        private const int RowsPerPage = 5; // Used primarily for calculating vertical spacing if needed, less direct role in Row/Column layout
         private const float PageMargin = 0.5f; // inches
+
+        // --- Constants for Conversion ---
+        private const float InchesToPoints = 72f;
 
         public void GenerateLabels(List<InventoryItem> items, string filename, string title)
         {
-            if (!items.Any())
+            if (items == null || !items.Any())
             {
                 AnsiConsole.MarkupLine("[yellow]No items provided to generate labels.[/]");
                 return;
@@ -34,50 +37,94 @@ namespace SimpleInventoryApp
                     {
                         page.Margin(PageMargin, Unit.Inch);
                         page.Size(PageSizes.Letter); // Standard letter size paper
-                        page.DefaultTextStyle(x => x.FontSize(12)); // Default font size
+                        page.DefaultTextStyle(x => x.FontSize(10)); // Default font size for labels
 
                         page.Header()
                             .AlignCenter()
+                            .PaddingBottom(5, Unit.Point) // Add some space below header
                             .Text(title)
                             .SemiBold().FontSize(14);
 
                         page.Content()
                             .PaddingVertical(10, Unit.Point)
-                            .Grid(grid =>
+                            .Column(mainColumn => // Use a main column to stack the rows of labels
                             {
-                                // Define grid columns based on label width and page margins
-                                grid.Columns(ColumnsPerPage);
-                                // Calculate horizontal gap to distribute labels evenly within margins
-                                float totalLabelWidth = ColumnsPerPage * LabelWidth;
-                                float availableWidth = PageSizes.Letter.Width - (2 * PageMargin * 72); // Convert inches to points (1 inch = 72 points)
-                                float horizontalGap = (availableWidth - (totalLabelWidth * 72)) / (ColumnsPerPage > 1 ? ColumnsPerPage - 1 : 1);
-                                grid.HorizontalSpacing(horizontalGap > 0 ? horizontalGap : 0, Unit.Point);
+                                // --- Calculate Spacing ---
+                                // Available width/height within margins (in points)
+                                float availableWidth = (PageSizes.Letter.Width / InchesToPoints - 2 * PageMargin) * InchesToPoints;
+                                // Estimate available height considering header/footer/margins
+                                float pageContentHeight = (PageSizes.Letter.Height / InchesToPoints - 2 * PageMargin) * InchesToPoints;
+                                float approxHeaderFooterHeight = 60; // Estimate header/footer/padding height in points
+                                float availableHeight = pageContentHeight - approxHeaderFooterHeight;
 
-                                // Calculate vertical gap
-                                float totalLabelHeight = RowsPerPage * LabelHeight;
-                                float availableHeight = PageSizes.Letter.Height - (2 * PageMargin * 72) - 50; // Approx height for header/footer/margins
-                                float verticalGap = (availableHeight - (totalLabelHeight * 72)) / (RowsPerPage > 1 ? RowsPerPage - 1 : 1);
-                                grid.VerticalSpacing(verticalGap > 0 ? verticalGap: 0, Unit.Point);
+                                // Calculate total width/height occupied by labels themselves (in points)
+                                float totalLabelsWidth = ColumnsPerPage * LabelWidth * InchesToPoints;
+                                // float totalLabelsHeight = RowsPerPage * LabelHeight * InchesToPoints; // Used mainly for vertical gap calculation
 
+                                // Calculate gaps (ensure non-negative)
+                                float horizontalGap = (ColumnsPerPage > 1)
+                                    ? Math.Max(0, (availableWidth - totalLabelsWidth) / (ColumnsPerPage - 1))
+                                    : 0;
+                                float verticalGap = (RowsPerPage > 1)
+                                     // Use calculated available height or just a fixed sensible gap
+                                     // Method 1: Using calculated available height (can be imprecise)
+                                     //? Math.Max(0, (availableHeight - totalLabelsHeight) / (RowsPerPage - 1))
+                                     // Method 2: Using a fixed sensible gap (often more reliable)
+                                     ? 10 // Points, adjust as needed for your label paper stock
+                                     : 0;
 
-                                foreach (var item in items)
+                                // Apply vertical spacing between the rows of labels
+                                mainColumn.Spacing(verticalGap, Unit.Point);
+
+                                // --- Create Rows and Labels ---
+                                int itemCount = items.Count;
+                                for (int i = 0; i < itemCount; i += ColumnsPerPage)
                                 {
-                                    grid.Item().Width(LabelWidth, Unit.Inch).Height(LabelHeight, Unit.Inch)
-                                       .Border(1, Unit.Point).BorderColor(Colors.Grey.Medium)
-                                       .Padding(5, Unit.Point) // Padding inside the label frame
-                                       .Column(column =>
-                                       {
-                                           column.Spacing(2); // Spacing between lines inside the label
+                                    // Get the items for the current row
+                                    var itemsInRow = items.Skip(i).Take(ColumnsPerPage).ToList();
 
-                                           column.Item().Text($"Inv#: {item.InventoryNumber}")
-                                                 .SemiBold().FontSize(11); // Larger font for Inv#
+                                    // Add a Row element to the main Column
+                                    mainColumn.Item().Row(row =>
+                                    {
+                                        // Apply horizontal spacing between labels in this row
+                                        row.Spacing(horizontalGap, Unit.Point);
 
-                                           column.Item().Text(item.Name)
-                                                 .FontSize(10); // Standard font for name
+                                        // Add each label as a Column item within the Row
+                                        foreach (var item in itemsInRow)
+                                        {
+                                            row.RelativeItem() // Use RelativeItem for flexible distribution if needed, or Item() for fixed size
+                                               .Width(LabelWidth, Unit.Inch)
+                                               .Height(LabelHeight, Unit.Inch)
+                                               .Border(1, Unit.Point).BorderColor(Colors.Grey.Medium)
+                                               .Padding(5, Unit.Point) // Padding inside the label frame
+                                               .Column(labelContentCol => // Content within the label arranged vertically
+                                               {
+                                                   labelContentCol.Spacing(2); // Spacing between lines inside the label
 
-                                            // Add more details if needed, e.g., item.Location
-                                            // column.Item().Text($"Loc: {item.Location}").Italic().FontSize(8);
-                                       });
+                                                   labelContentCol.Item().Text($"Inv#: {item.InventoryNumber}")
+                                                                .SemiBold().FontSize(11); // Slightly larger font for Inv#
+
+                                                   labelContentCol.Item().Text(item.Name)
+                                                                .FontSize(10); // Standard font for name
+
+                                                   // Example: Add location if it exists
+                                                   if (!string.IsNullOrWhiteSpace(item.Location))
+                                                   {
+                                                      labelContentCol.Item().Text($"Loc: {item.Location}").Italic().FontSize(8);
+                                                   }
+                                               });
+                                        }
+
+                                        // Add placeholder items if the row is not full to maintain spacing
+                                        int placeholdersNeeded = ColumnsPerPage - itemsInRow.Count;
+                                        for (int j = 0; j < placeholdersNeeded; j++)
+                                        {
+                                            // Add an empty item to take up space and keep alignment
+                                            row.RelativeItem().Width(LabelWidth, Unit.Inch).Height(LabelHeight, Unit.Inch);
+                                            // Or use row.ConstantItem if RelativeItem causes issues
+                                            // row.ConstantItem(LabelWidth * InchesToPoints).Height(LabelHeight, Unit.Inch);
+                                        }
+                                    });
                                 }
                             });
 
@@ -99,7 +146,7 @@ namespace SimpleInventoryApp
             catch (Exception ex)
             {
                 AnsiConsole.MarkupLine($"[red]Error generating PDF: {Markup.Escape(ex.Message)}[/]");
-                // Consider more detailed logging or error handling here
+                AnsiConsole.WriteException(ex, ExceptionFormats.ShortenPaths); // More detailed exception output
             }
         }
 

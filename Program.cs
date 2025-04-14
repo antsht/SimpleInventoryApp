@@ -363,11 +363,11 @@ namespace SimpleInventoryApp
              var okButton = new Button("OK", is_default: true);
 
             // --- Enter Key Navigation --- 
-            void MoveFocus(View current, View next) {
-                if (current.HasFocus) {
-                    next.SetFocus();
-                }
-            }
+            // void MoveFocus(View current, View next) {
+            //     if (current.HasFocus) {
+            //         next.SetFocus();
+            //     }
+            // }
 
             invNumText.KeyPress += (args) => {
                  if (args.KeyEvent.Key == Key.Enter) {

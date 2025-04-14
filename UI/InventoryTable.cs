@@ -28,9 +28,10 @@ namespace SimpleInventoryApp.UI
             {
                 X = 0,
                 Y = 0,
-                Width = Dim.Fill(1), // Leave space for scrollbar
-                Height = Dim.Fill(), // Changed from Dim.Fill(1) to respect parent border
+                Width = Dim.Fill(1), // Leave space for scrollbar/right border
+                Height = Dim.Fill(1), // Fill the FrameView, but leave 1 line for its border
                 FullRowSelect = true, // Select the whole row
+                
             };
 
             // Define columns matching InventoryItem properties
@@ -115,7 +116,6 @@ namespace SimpleInventoryApp.UI
                     }
                 }
             };
-
             return inventoryTableView;
         }
 

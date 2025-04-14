@@ -55,10 +55,11 @@ namespace SimpleInventoryApp
             menu = new MenuBar(new MenuBarItem[] {
                 new MenuBarItem ("_Items", new MenuItem [] {
                     new MenuItem ("_List All", "", () => InventoryOperations.ListAllItems(), null, null, (Key)0),
+                    new MenuItem ("_Sort / Filter...", "", () => InventoryOperations.ShowSortFilterDialog(), null, null, Key.F5),
                     new MenuItem ("_Add New...", "", () => InventoryOperations.AddItem(), null, null, (Key)0),
                     new MenuItem ("_Update Quantity...", "", () => InventoryOperations.UpdateItemQuantity(), null, null, (Key)0),
                     new MenuItem ("_Update Location...", "", () => InventoryOperations.UpdateItemLocation(), null, null, (Key)0),
-                    new MenuItem ("Delete Record...", "", () => InventoryOperations.DeleteItem(), null, null, (Key)0),
+                    new MenuItem ("_Delete Record...", "", () => InventoryOperations.DeleteItem(), null, null, (Key)0),
                     new MenuItem ("Find by _Name...", "", () => InventoryOperations.FindItemByName(), null, null, (Key)0),
                     new MenuItem ("Find by Inv _Num...", "", () => InventoryOperations.FindItemByInvNum(), null, null, (Key)0)
                 }),
@@ -95,21 +96,28 @@ namespace SimpleInventoryApp
                 new StatusItem(Key.S | Key.CtrlMask, "~^S~ Save", () => DataOperations.SaveData()),
                 // Shortcut for Restore
                 new StatusItem(Key.R | Key.CtrlMask, "~^R~ Restore", () => {
-                    // Use timeout wrapper as Restore shows confirmation dialog
                     Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
                           DataOperations.RestoreData();
-                          return false; // Run only once
+                          return false; 
                      });
                 }),
-                // Shortcut for deleting selected item
+                // Shortcut for deleting selected item (NOTE: Currently non-functional from status bar)
                 new StatusItem(Key.D | Key.CtrlMask, "~^D~ Delete", () => {
-                    // Use timeout wrapper to safely call DeleteItem
-                    Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
-                          // Need to implement this delete action through our new structure
-                          // For now, we'll ignore this since it requires access to the selected item
-                          return false; // Run only once
-                     });
-                })
+                    // Deleting via status bar shortcut is tricky as we don't have direct access 
+                    // to the selected item here. The Delete key press is handled in InventoryTable.cs.
+                    UserInterface.ShowMessage("Delete Shortcut", "Use the Delete key on the selected item in the table.");
+                    // Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
+                          // var selectedItem = InventoryOperations.GetSelectedItem(); // Incorrect
+                          // if (selectedItem != null) {
+                          //    InventoryOperations.DeleteItem(selectedItem);
+                          // } else {
+                          //    UserInterface.ShowMessage("Delete", "No item selected.");
+                          // }
+                          // return false; 
+                     // });
+                }),
+                // Shortcut for Sort/Filter
+                new StatusItem(Key.F5, "~F5~ Sort/Filter", () => InventoryOperations.ShowSortFilterDialog())
             });
             statusBar.Add(statusLabel); // Add the label view directly to the status bar
 

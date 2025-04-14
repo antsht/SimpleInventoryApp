@@ -58,7 +58,7 @@ namespace SimpleInventoryApp.Operations
                     
                     UserInterface.SetHasUnsavedChanges(false); // Reset flag
                     InventoryTable.Initialize(inventory); // Update the inventory table reference
-                    InventoryTable.PopulateInventoryTable(); // Refresh the view with reloaded data
+                    InventoryTable.PopulateInventoryTable(InventoryOperations.ApplySortAndFilter()); // Refresh view with restored data + sort/filter
                     UserInterface.UpdateStatus("Data restored successfully from disk.");
                 }
                 catch (Exception ex)
@@ -177,13 +177,12 @@ namespace SimpleInventoryApp.Operations
                     try
                     {
                         csvManager.ImportFromCsv(filePath);
-
                         inventory = dataStorage.LoadItems() ?? new List<InventoryItem>();
                         locations = dataStorage.LoadLocations() ?? new List<string>();
 
-                        UserInterface.SetHasUnsavedChanges(false);
-                        InventoryTable.Initialize(inventory);
-                        InventoryTable.PopulateInventoryTable();
+                        UserInterface.SetHasUnsavedChanges(false); // Data on disk IS current after import
+                        InventoryTable.Initialize(inventory); // Update the inventory table reference
+                        InventoryTable.PopulateInventoryTable(InventoryOperations.ApplySortAndFilter()); // Refresh view with imported data + sort/filter
                         
                         UserInterface.ShowMessage("Import Complete", $"Import process finished from '{Path.GetFileName(filePath)}'. Check table for results.");
                         UserInterface.UpdateStatus("Import process complete.");

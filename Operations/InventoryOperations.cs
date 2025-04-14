@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Data; // Required for DataTable
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Terminal.Gui;
@@ -14,6 +16,12 @@ namespace SimpleInventoryApp.Operations
         private static List<string> locations = new List<string>();
         private static DataStorage dataStorage = null!;
         
+        // --- Sort/Filter State ---
+        private static string currentSortColumn = "ID"; // Default sort
+        private static bool sortAscending = true; 
+        private static string currentFilterText = string.Empty;
+        // -------------------------
+        
         public static void Initialize(List<InventoryItem> inventoryItems, List<string> locationItems, DataStorage storage)
         {
             inventory = inventoryItems;
@@ -24,13 +32,136 @@ namespace SimpleInventoryApp.Operations
             InventoryTable.Initialize(inventory);
         }
 
+        // --- New Method for Sort/Filter Dialog ---
+        public static void ShowSortFilterDialog()
+        {
+            var dialog = new Dialog("Sort & Filter Inventory", 65, 15);
+
+            // Sort Column Selection
+            var sortColLabel = new Label("Sort By:") { X = 1, Y = 1 };
+            var sortCols = new List<string> { "ID", "Inv Num", "Name", "Qty", "Location", "Last Updated" };
+            var sortColCombo = new ComboBox() { 
+                X = 15, Y = 1, Width = 20
+                // ReadOnly = true // REMOVED: Test if this prevents dropdown opening
+            };
+            sortColCombo.SetSource(sortCols);
+            sortColCombo.SelectedItem = sortCols.IndexOf(currentSortColumn); // Set current sort
+
+            // Handle KeyDown to open list
+            sortColCombo.KeyPress += (args) => {
+                if (args.KeyEvent.Key == Key.CursorDown) {
+                    // Try invoking the default expand key process (F4)
+                    var f4KeyEvent = new KeyEvent(Key.F4, new KeyModifiers());
+                    sortColCombo.ProcessKey(f4KeyEvent);
+                    // Application.Driver.SendKey(Key.AltMask | Key.CursorDown); // Inconsistent API
+                    args.Handled = true; // Prevent default focus change
+                }
+            };
+
+            // Sort Direction
+            var sortDirLabel = new Label("Direction:") { X = 38, Y = 1 };
+            var sortDirRadio = new RadioGroup() { 
+                X = 38, Y = 2, 
+                RadioLabels = new NStack.ustring[] { "Ascending", "Descending" } 
+            };
+            sortDirRadio.SelectedItem = sortAscending ? 0 : 1;
+            
+            // Filter Text
+            var filterLabel = new Label("Filter Text:") { X = 1, Y = 5 };
+            var filterText = new TextField(currentFilterText) { X = 15, Y = 5, Width = 40 };
+            var filterHelp = new Label("(Filters Name, Inv Num, Desc, Location)") {
+                 X = 15, Y = 6,
+                 ColorScheme = Colors.Error // Use the built-in Error color scheme for help text
+            };
+
+            // Apply Button
+            var applyBtn = new Button("Apply");
+            applyBtn.Clicked += () => {
+                currentSortColumn = sortCols[sortColCombo.SelectedItem];
+                sortAscending = sortDirRadio.SelectedItem == 0;
+                currentFilterText = filterText.Text?.ToString() ?? string.Empty;
+                
+                InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Apply and refresh
+                UserInterface.UpdateStatus("Sort/Filter applied.");
+                Application.RequestStop();
+            };
+
+            // Clear Filter Button
+            var clearBtn = new Button("Clear Filter");
+            clearBtn.Clicked += () => {
+                currentFilterText = string.Empty;
+                filterText.Text = string.Empty; // Clear the text field in the dialog too
+                // Keep current sort order when clearing filter
+                InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Apply and refresh
+                UserInterface.UpdateStatus("Filter cleared.");
+                // Keep dialog open to adjust sort if needed
+            };
+
+            // Cancel Button
+            var cancelBtn = new Button("Cancel");
+            cancelBtn.Clicked += () => { Application.RequestStop(); };
+
+            dialog.Add(sortColLabel, sortColCombo, sortDirLabel, sortDirRadio, filterLabel, filterText, filterHelp);
+            dialog.AddButton(cancelBtn);
+            dialog.AddButton(clearBtn);
+            dialog.AddButton(applyBtn);
+
+            dialog.FocusFirst();
+            sortColCombo.SetFocus(); // Change focus to Sort By combo box initially
+            // filterText.SetFocus(); // OLD: Start with filter text field focused
+            Application.Run(dialog);
+        }
+
+        // --- New Method to Apply Current Sort/Filter --- 
+        public static List<InventoryItem> ApplySortAndFilter()
+        {
+            IEnumerable<InventoryItem> query = inventory;
+
+            // Apply Filter
+            if (!string.IsNullOrWhiteSpace(currentFilterText))
+            {
+                string filterLower = currentFilterText.ToLowerInvariant();
+                query = query.Where(item => 
+                    (item.Name?.ToLowerInvariant().Contains(filterLower) ?? false) ||
+                    (item.InventoryNumber?.ToLowerInvariant().Contains(filterLower) ?? false) ||
+                    (item.Description?.ToLowerInvariant().Contains(filterLower) ?? false) ||
+                    (item.Location?.ToLowerInvariant().Contains(filterLower) ?? false)
+                );
+            }
+
+            // Apply Sorting
+            switch (currentSortColumn)
+            {
+                case "Inv Num":
+                    query = sortAscending ? query.OrderBy(i => i.InventoryNumber) : query.OrderByDescending(i => i.InventoryNumber);
+                    break;
+                case "Name":
+                    query = sortAscending ? query.OrderBy(i => i.Name) : query.OrderByDescending(i => i.Name);
+                    break;
+                case "Qty":
+                    query = sortAscending ? query.OrderBy(i => i.Quantity) : query.OrderByDescending(i => i.Quantity);
+                    break;
+                case "Location":
+                    query = sortAscending ? query.OrderBy(i => i.Location) : query.OrderByDescending(i => i.Location);
+                    break;
+                case "Last Updated":
+                    query = sortAscending ? query.OrderBy(i => i.LastUpdated) : query.OrderByDescending(i => i.LastUpdated);
+                    break;
+                case "ID": // Fallback/default
+                default:
+                     query = sortAscending ? query.OrderBy(i => i.Id) : query.OrderByDescending(i => i.Id);
+                    break;
+            }
+
+            return query.ToList(); // Return the filtered and sorted list
+        }
+
+        // --- Updated ListAllItems ---
         public static void ListAllItems()
         {
-            // Re-initialize InventoryTable with current inventory
-            InventoryTable.Initialize(inventory);
-            // Display all items
-            InventoryTable.PopulateInventoryTable();
-            UserInterface.UpdateStatus("Displaying all inventory items.");
+            // No longer clears filter/sort, just refreshes view with current settings
+            InventoryTable.PopulateInventoryTable(ApplySortAndFilter());
+            UserInterface.UpdateStatus($"Displaying {ApplySortAndFilter().Count} of {inventory.Count} items.");
         }
 
         public static void AddItem()
@@ -65,6 +196,16 @@ namespace SimpleInventoryApp.Operations
                 Width = 30,
                 Height = 6 // Increase height to show more items + border
                 // ReadOnly = sortedLocations.Count > 0 // Keep commented out for now
+            };
+
+            // Handle KeyDown to open list
+            locCombo.KeyPress += (args) => {
+                if (args.KeyEvent.Key == Key.CursorDown) {
+                    // Try invoking the default expand key process (F4)
+                    var f4KeyEvent = new KeyEvent(Key.F4, new KeyModifiers());
+                    locCombo.ProcessKey(f4KeyEvent);
+                    args.Handled = true; // Prevent default focus change
+                }
             };
 
             // Set the source for the ComboBox
@@ -200,7 +341,7 @@ namespace SimpleInventoryApp.Operations
 
             if (itemAdded)
             {
-                InventoryTable.PopulateInventoryTable(); // Refresh the main table
+                InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Refresh with sort/filter
                 UserInterface.UpdateStatus($"Item added successfully.");
             } else {
                 UserInterface.UpdateStatus("Add item cancelled or failed.");
@@ -242,6 +383,16 @@ namespace SimpleInventoryApp.Operations
             };
 
             // Auto-open dropdown on focus - REMOVED
+
+            // Handle KeyDown to open list
+            locCombo.KeyPress += (args) => {
+                if (args.KeyEvent.Key == Key.CursorDown) {
+                    // Try invoking the default expand key process (F4)
+                    var f4KeyEvent = new KeyEvent(Key.F4, new KeyModifiers());
+                    locCombo.ProcessKey(f4KeyEvent);
+                    args.Handled = true; // Prevent default focus change
+                }
+            };
 
             // Add the sorted locations to the combo box and find the current location's index
             int currentLocationIndex = 0;
@@ -336,7 +487,10 @@ namespace SimpleInventoryApp.Operations
                             // User declined, stop the OK action
                             UserInterface.ShowMessage("Location Not Added", "Please select an existing location or confirm adding the new one.");
                             locCombo.Text = itemToEdit.Location ?? "Default"; // Null-coalescing
-                            locCombo.SelectedItem = sortedLocations.IndexOf(itemToEdit.Location ?? "Default"); // Null-coalescing
+                            if (sortedLocations != null)
+                            {
+                                locCombo.SelectedItem = sortedLocations.IndexOf(itemToEdit.Location ?? "Default");
+                            }
                             locCombo.SetFocus(); // Put focus back on combo box
                             return; // Don't close dialog
                         }
@@ -366,8 +520,8 @@ namespace SimpleInventoryApp.Operations
                 // --- Update Item Logic ---
                 try {
                     bool requiresSave = false;
-                    if (itemToEdit.InventoryNumber != (invNumText.Text?.ToString()!.Trim() ?? string.Empty)) { itemToEdit.InventoryNumber = invNumText.Text?.ToString()!.Trim(); requiresSave = true; }
-                    if (itemToEdit.Name != (nameText.Text?.ToString()!.Trim() ?? string.Empty)) { itemToEdit.Name = nameText.Text?.ToString()!.Trim(); requiresSave = true; }
+                    if (itemToEdit.InventoryNumber != (invNumText.Text?.ToString()?.Trim() ?? string.Empty)) { itemToEdit.InventoryNumber = invNumText.Text?.ToString()?.Trim() ?? string.Empty; requiresSave = true; }
+                    if (itemToEdit.Name != (nameText.Text?.ToString()?.Trim() ?? string.Empty)) { itemToEdit.Name = nameText.Text?.ToString()?.Trim() ?? string.Empty; requiresSave = true; }
                     if (itemToEdit.Description != (descText.Text?.ToString()?.Trim() ?? string.Empty)) { itemToEdit.Description = descText.Text?.ToString()?.Trim() ?? string.Empty; requiresSave = true; }
                     if (itemToEdit.Quantity != quantity) { itemToEdit.Quantity = quantity; requiresSave = true; }
                     if (locationChanged) { itemToEdit.Location = finalLocation; requiresSave = true; }
@@ -404,7 +558,7 @@ namespace SimpleInventoryApp.Operations
 
             if (itemEdited)
             {
-                InventoryTable.PopulateInventoryTable(); // Refresh the main table
+                InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Refresh with sort/filter
                 UserInterface.UpdateStatus($"Item ID {itemToEdit.Id} updated successfully.");
             } else {
                 UserInterface.UpdateStatus("Edit item cancelled or failed.");
@@ -423,7 +577,7 @@ namespace SimpleInventoryApp.Operations
                 {
                     inventory.Remove(itemToDelete);
                     UserInterface.SetHasUnsavedChanges(true);
-                    InventoryTable.PopulateInventoryTable(); // Refresh the table
+                    InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Refresh with sort/filter
                     UserInterface.UpdateStatus($"Item ID {itemToDelete.Id} deleted successfully.");
                 }
                 catch (Exception ex)
@@ -528,9 +682,8 @@ namespace SimpleInventoryApp.Operations
                     
                     if (results.Count > 0)
                     {
-                        // Populate table with filtered results
-                        InventoryTable.PopulateInventoryTable(results);
-                        UserInterface.UpdateStatus($"Found {results.Count} items matching '{searchText}'.");
+                        InventoryTable.PopulateInventoryTable(results); // Populate with ONLY found items
+                        UserInterface.UpdateStatus($"Found {results.Count} item(s) matching '{searchText}'.");
                     }
                     else
                     {
@@ -583,9 +736,8 @@ namespace SimpleInventoryApp.Operations
                     
                     if (results.Count > 0)
                     {
-                        // Populate table with filtered results
-                        InventoryTable.PopulateInventoryTable(results);
-                        UserInterface.UpdateStatus($"Found {results.Count} items matching Inv# '{searchText}'.");
+                        InventoryTable.PopulateInventoryTable(results); // Populate with ONLY found items
+                        UserInterface.UpdateStatus($"Found {results.Count} item(s) matching '{searchText}'.");
                     }
                     else
                     {

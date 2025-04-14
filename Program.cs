@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Spectre.Console;
+using QuestPDF.Infrastructure; // <-- Add QuestPDF using
 
 namespace SimpleInventoryApp
 {
@@ -12,9 +13,15 @@ namespace SimpleInventoryApp
         static readonly CsvManager csvManager = new CsvManager(dataStorage);
         static List<InventoryItem> inventory = new List<InventoryItem>();
         static List<string> locations = new List<string>(); // New list for locations
+        // Instantiate the PDF generator
+        static readonly PdfLabelGenerator pdfGenerator = new PdfLabelGenerator();
 
         static void Main(string[] args)
         {
+            // --- QuestPDF Initialization ---
+            QuestPDF.Settings.License = LicenseType.Community;
+            // -------------------------------
+
             // Load both data sets
             inventory = dataStorage.LoadItems();
             locations = dataStorage.LoadLocations();
@@ -23,7 +30,7 @@ namespace SimpleInventoryApp
             AnsiConsole.Write(
                 new FigletText("Inventory Mgr")
                 .Centered()
-                .Color(Color.Blue));
+                .Color(Spectre.Console.Color.Blue));
             AnsiConsole.WriteLine();
 
             bool dataChanged = false; // Flag to track if saving is needed
@@ -31,117 +38,39 @@ namespace SimpleInventoryApp
 
             while (keepRunning)
             {
-                AnsiConsole.Clear(); // Clear screen before showing menu
+                AnsiConsole.Clear(); // Clear screen before showing top menu
                 AnsiConsole.Write(new Rule("[yellow]Main Menu[/]").RuleStyle("blue").LeftJustified());
 
-                // Define menu items dynamically based on whether locations exist
-                var menuChoices = new List<string> {
-                    "List All Items",
-                    "Add New Item/Component",
-                    "Update Item Quantity",
-                    "Update Item Location", // New Option
-                    "Delete Item Record",
-                    "Find Item by Name",
-                    "Find Item by Inventory Number",
-                    "--- Locations ---", // Separator
-                    "List Locations",
-                    "Add New Location",
-                    "--- Import/Export ---",
-                    "Export to CSV",
-                    "Import from CSV",
-                    "[red]Exit[/]"
-                 };
-
-                // Disable adding items if no locations defined
-                if (!locations.Any())
-                {
-                    menuChoices.Remove("Add New Item/Component");
-                    menuChoices.Remove("Update Item Location");
-                    menuChoices.Insert(1, "[grey]Add New Item/Component (Add locations first)[/]"); // Show disabled option
-                    menuChoices.Insert(3, "[grey]Update Item Location (Add locations first)[/]"); // Show disabled option
-                }
-
-
-                var choice = AnsiConsole.Prompt(
+                var topChoice = AnsiConsole.Prompt(
                     new SelectionPrompt<string>()
-                        .Title("What would you like to do?")
-                        .PageSize(15) // Increase page size a bit
-                        .AddChoices(menuChoices)
-                        );
+                        .Title("Select a category:")
+                        .PageSize(5)
+                        .AddChoices(new[] {
+                            "Items", "Dictionary", "Service", "Reports", "[red]Exit[/]"
+                        }));
 
-                dataChanged = false; // Reset flag before action
+                dataChanged = false; // Reset flag for each top-level action
 
-                switch (choice)
+                switch (topChoice)
                 {
-                    case "List All Items":
-                        ListItems();
+                    case "Items":
+                        ShowItemsMenu(ref dataChanged);
                         break;
-                    case "Add New Item/Component":
-                        if (locations.Any()) // Double check locations exist
-                        {
-                            AddItem();
-                            dataChanged = true; // Adding item modifies data
-                        }
-                        else
-                        {
-                            AnsiConsole.MarkupLine("[yellow]Please add at least one location before adding items.[/]");
-                        }
+                    case "Dictionary":
+                        ShowDictionaryMenu(ref dataChanged);
                         break;
-                    case "Update Item Quantity":
-                        UpdateItemQuantity();
-                        dataChanged = true; // Assume quantity might change
+                    case "Service":
+                        ShowServiceMenu(ref dataChanged);
                         break;
-                    case "Update Item Location":
-                        if (locations.Any()) // Double check locations exist
-                        {
-                            UpdateItemLocation(); // New function call
-                            dataChanged = true; // Location change modifies data
-                        }
-                        else
-                        {
-                            AnsiConsole.MarkupLine("[yellow]Please add at least one location before updating item locations.[/]");
-                        }
+                    case "Reports":
+                        ShowReportsMenu();
                         break;
-                    case "Delete Item Record":
-                        DeleteItem();
-                        dataChanged = true; // Deleting item modifies data
-                        break;
-                    case "Find Item by Name":
-                        FindItemByName();
-                        break;
-                    case "Find Item by Inventory Number":
-                        FindItemByInventoryNumber();
-                        break;
-                    // --- Location Management ---
-                    case "List Locations":
-                        ListLocations();
-                        break;
-                    case "Add New Location":
-                        AddLocation();
-                        dataChanged = true; // Adding location modifies data
-                        break;
-                    // --- Import/Export ---
-                    case "Export to CSV":
-                        ExportToCsv();
-                        break;
-                    case "Import from CSV":
-                        ImportFromCsv();
-                        dataChanged = true;
-                        break;
-                    // --- Other ---
                     case "[red]Exit[/]":
                         keepRunning = false;
                         break;
-                    case string s when s.StartsWith("[grey]"): // Handle disabled options
-                        AnsiConsole.MarkupLine("[yellow]This option is disabled. Please add locations first.[/]");
-                        break;
-                    default:
-                        // Handle potential separator or unexpected input
-                        AnsiConsole.MarkupLine($"[grey]Option '{choice}' selected.[/]"); // Or just ignore
-                        break;
                 }
 
-                // Save changes if any modifying action was taken
+                // Save changes if any modifying action was taken within submenus
                 if (dataChanged)
                 {
                     dataStorage.SaveItems(inventory);
@@ -149,9 +78,14 @@ namespace SimpleInventoryApp
                     AnsiConsole.MarkupLine("[green]Data saved successfully.[/]");
                     Pause(); // Pause only after saving
                 }
-                else if (choice != "[red]Exit[/]" && !choice.StartsWith("---") && !choice.StartsWith("[grey]")) // Pause after non-modifying actions (like lists/finds)
+                else if (keepRunning) // Pause after non-modifying actions unless exiting
                 {
-                    Pause();
+                     // Don't pause if a sub-menu was exited immediately without action
+                     // (Requires more complex state tracking, or just accept the pause)
+                     // Simple approach: Always pause if not exiting and no data changed.
+                     // Consider if Pause() is needed after just viewing menus.
+                     // For now, let's pause unless Exiting.
+                     Pause();
                 }
             }
 
@@ -159,6 +93,267 @@ namespace SimpleInventoryApp
             // dataStorage.SaveItems(inventory);
             // dataStorage.SaveLocations(locations);
             AnsiConsole.MarkupLine("[green]Inventory saved. Goodbye![/]");
+        }
+
+        // --- Sub-Menu Methods ---
+
+        static void ShowItemsMenu(ref bool dataChanged)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule("[green]Items Menu[/]").RuleStyle("green").LeftJustified());
+
+            var itemChoices = new List<string> {
+                "List All Items",
+                "Add New Item/Component",
+                "Update Item Quantity",
+                "Update Item Location",
+                "Delete Item Record",
+                "Find Item by Name",
+                "Find Item by Inventory Number",
+                 "[yellow]< Back[/]" // Option to go back
+            };
+
+            // Disable adding/updating location if no locations defined
+            if (!locations.Any())
+            {
+                itemChoices.Remove("Add New Item/Component");
+                itemChoices.Remove("Update Item Location");
+                itemChoices.Insert(1, "[grey]Add New Item/Component (Add locations first)[/]"); // Show disabled option
+                itemChoices.Insert(3, "[grey]Update Item Location (Add locations first)[/]"); // Show disabled option
+            }
+
+
+            var choice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("Item Actions:")
+                        .PageSize(10)
+                        .AddChoices(itemChoices)
+                        );
+
+            switch (choice)
+            {
+                case "List All Items":
+                    ListItems();
+                    break;
+                case "Add New Item/Component":
+                    if (locations.Any()) { AddItem(); dataChanged = true; }
+                    else { AnsiConsole.MarkupLine("[yellow]Please add at least one location first.[/]"); }
+                    break;
+                case "Update Item Quantity":
+                    UpdateItemQuantity(); dataChanged = true;
+                    break;
+                case "Update Item Location":
+                     if (locations.Any()) { UpdateItemLocation(); dataChanged = true; }
+                    else { AnsiConsole.MarkupLine("[yellow]Please add at least one location first.[/]"); }
+                    break;
+                case "Delete Item Record":
+                    DeleteItem(); dataChanged = true;
+                    break;
+                case "Find Item by Name":
+                    FindItemByName();
+                    break;
+                case "Find Item by Inventory Number":
+                    FindItemByInventoryNumber();
+                    break;
+                case string s when s.StartsWith("[grey]"): // Handle disabled options
+                     AnsiConsole.MarkupLine("[yellow]This option is disabled. Please add locations first.[/]");
+                     break;
+                case "[yellow]< Back[/]":
+                    return; // Return to main menu
+                default:
+                     AnsiConsole.MarkupLine($"[grey]Option '{choice}' selected.[/]");
+                     break;
+            }
+             // Don't pause here, pause is handled in the main loop after returning
+        }
+
+        static void ShowDictionaryMenu(ref bool dataChanged)
+        {
+             AnsiConsole.Clear();
+             AnsiConsole.Write(new Rule("[blue]Dictionary Menu[/]").RuleStyle("blue").LeftJustified());
+
+             var dictChoice = AnsiConsole.Prompt(
+                 new SelectionPrompt<string>()
+                     .Title("Dictionary Actions:")
+                     .PageSize(5)
+                     .AddChoices(new[] { "Locations", "[yellow]< Back[/]" })
+             );
+
+             switch (dictChoice)
+             {
+                 case "Locations":
+                     ShowLocationsMenu(ref dataChanged);
+                     break;
+                 case "[yellow]< Back[/]":
+                     return; // Return to main menu
+             }
+             // Pause handled in main loop
+        }
+
+        static void ShowLocationsMenu(ref bool dataChanged)
+        {
+             AnsiConsole.Clear();
+             AnsiConsole.Write(new Rule("[cyan]Locations Menu[/]").RuleStyle("cyan").LeftJustified());
+
+            var locChoice = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("Location Actions:")
+                    .PageSize(5)
+                    .AddChoices(new[] { "List Locations", "Add New Location", "[yellow]< Back[/]" })
+            );
+
+            switch (locChoice)
+            {
+                case "List Locations":
+                    ListLocations();
+                    break;
+                case "Add New Location":
+                    AddLocation();
+                    dataChanged = true;
+                    break;
+                case "[yellow]< Back[/]":
+                     // Instead of returning to Main, return to Dictionary menu
+                     // This requires restructuring the call stack or passing more state.
+                     // Simplest is returning to Main for now.
+                    return; // Return to the caller (Dictionary menu, which then returns to Main)
+            }
+            // Pause handled in main loop
+        }
+
+         static void ShowServiceMenu(ref bool dataChanged)
+         {
+             AnsiConsole.Clear();
+             AnsiConsole.Write(new Rule("[magenta]Service Menu[/]").RuleStyle("magenta").LeftJustified());
+
+             var serviceChoice = AnsiConsole.Prompt(
+                 new SelectionPrompt<string>()
+                     .Title("Service Actions:")
+                     .PageSize(5)
+                     .AddChoices(new[] { "CSV", "[yellow]< Back[/]" })
+             );
+
+              switch (serviceChoice)
+              {
+                  case "CSV":
+                      ShowCsvMenu(ref dataChanged);
+                      break;
+                  case "[yellow]< Back[/]":
+                      return; // Return to main menu
+              }
+              // Pause handled in main loop
+         }
+
+         static void ShowCsvMenu(ref bool dataChanged)
+         {
+              AnsiConsole.Clear();
+              AnsiConsole.Write(new Rule("[yellow]CSV Import/Export[/]").RuleStyle("yellow").LeftJustified());
+
+              var csvChoice = AnsiConsole.Prompt(
+                  new SelectionPrompt<string>()
+                      .Title("CSV Actions:")
+                      .PageSize(5)
+                      .AddChoices(new[] { "Export to CSV", "Import from CSV", "[yellow]< Back[/]" })
+              );
+
+              switch (csvChoice)
+              {
+                  case "Export to CSV":
+                      ExportToCsv();
+                      // Export doesn't change data flag
+                      break;
+                  case "Import from CSV":
+                      ImportFromCsv();
+                      dataChanged = true; // Import changes data
+                      break;
+                 case "[yellow]< Back[/]":
+                      // Return to the caller (Service menu, which then returns to Main)
+                     return;
+              }
+               // Pause handled in main loop
+         }
+
+         static void ShowReportsMenu()
+         {
+             AnsiConsole.Clear();
+             AnsiConsole.Write(new Rule("[green]Reports Menu[/]").RuleStyle("green").LeftJustified());
+
+             var reportChoice = AnsiConsole.Prompt(
+                 new SelectionPrompt<string>()
+                     .Title("Generate Labels PDF:")
+                     .PageSize(5)
+                     .AddChoices(new[] {
+                         "All Items",
+                         "By Location",
+                         "By Inventory Number",
+                         "[yellow]< Back[/]"
+                     })
+             );
+
+             switch (reportChoice)
+             {
+                 case "All Items":
+                     GenerateLabelsForAllItems();
+                     break;
+                 case "By Location":
+                     GenerateLabelsByLocation();
+                     break;
+                 case "By Inventory Number":
+                     GenerateLabelsByInventoryNumber();
+                     break;
+                 case "[yellow]< Back[/]":
+                     return; // Return to main menu
+             }
+             // Pause handled in main loop
+         }
+
+        // Placeholder methods for PDF generation
+        static void GenerateLabelsForAllItems()
+        {
+            AnsiConsole.MarkupLine("[cyan]Generating PDF labels for all items...[/]");
+            pdfGenerator.GenerateAllItemsReport(inventory);
+            // Pause handled by main loop
+        }
+
+        static void GenerateLabelsByLocation()
+        {
+            if (!locations.Any())
+            {
+                AnsiConsole.MarkupLine("[yellow]No locations defined. Cannot generate report by location.[/]");
+                return;
+            }
+
+            AnsiConsole.MarkupLine("[cyan]Select a location to generate labels for:[/]");
+            string selectedLocation = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("Select [green]location[/]:")
+                    .PageSize(10)
+                    .MoreChoicesText("[grey](Move up and down to reveal more locations)[/]")
+                    .AddChoices(locations.OrderBy(l => l))
+                );
+
+            AnsiConsole.MarkupLine($"[cyan]Generating PDF labels for location '{Markup.Escape(selectedLocation)}'...[/]");
+            pdfGenerator.GenerateLocationReport(inventory, selectedLocation);
+            // Pause handled by main loop
+        }
+
+        static void GenerateLabelsByInventoryNumber()
+        {
+            if (!inventory.Any())
+            {
+                AnsiConsole.MarkupLine("[yellow]Inventory is empty. Cannot generate report by inventory number.[/]");
+                return;
+            }
+
+            AnsiConsole.MarkupLine("[cyan]Enter the Inventory Number to generate labels for:[/]");
+            string invNum = AnsiConsole.Prompt(
+                new TextPrompt<string>("Enter [green]Inventory Number[/]:")
+                    .PromptStyle("cyan")
+                    .Validate(input => !string.IsNullOrWhiteSpace(input), "[red]Inventory Number cannot be empty.[/]")
+                );
+
+            AnsiConsole.MarkupLine($"[cyan]Generating PDF labels for Inventory # '{Markup.Escape(invNum)}'...[/]");
+            pdfGenerator.GenerateInventoryNumberReport(inventory, invNum);
+            // Pause handled by main loop
         }
 
         // --- Item Methods (ListItems, UpdateItemQuantity, DeleteItem, Find*) ---

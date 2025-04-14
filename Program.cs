@@ -9,6 +9,7 @@ namespace SimpleInventoryApp
     {
         // Keep DataStorage instance, it now handles both files
         static readonly DataStorage dataStorage = new DataStorage(); // Uses default filenames
+        static readonly CsvManager csvManager = new CsvManager(dataStorage);
         static List<InventoryItem> inventory = new List<InventoryItem>();
         static List<string> locations = new List<string>(); // New list for locations
 
@@ -45,6 +46,9 @@ namespace SimpleInventoryApp
                     "--- Locations ---", // Separator
                     "List Locations",
                     "Add New Location",
+                    "--- Import/Export ---",
+                    "Export to CSV",
+                    "Import from CSV",
                     "[red]Exit[/]"
                  };
 
@@ -115,6 +119,14 @@ namespace SimpleInventoryApp
                     case "Add New Location":
                         AddLocation();
                         dataChanged = true; // Adding location modifies data
+                        break;
+                    // --- Import/Export ---
+                    case "Export to CSV":
+                        ExportToCsv();
+                        break;
+                    case "Import from CSV":
+                        ImportFromCsv();
+                        dataChanged = true;
                         break;
                     // --- Other ---
                     case "[red]Exit[/]":
@@ -400,6 +412,59 @@ namespace SimpleInventoryApp
         {
             AnsiConsole.MarkupLine("\n[grey]Press Enter to continue...[/]");
             Console.ReadLine();
+        }
+
+        static void ExportToCsv()
+        {
+            AnsiConsole.Write(new Rule("[blue]Export to CSV[/]").RuleStyle("blue").Centered());
+            
+            if (!inventory.Any())
+            {
+                AnsiConsole.MarkupLine("[yellow]No items to export.[/]");
+                return;
+            }
+
+            try
+            {
+                string fileName = AnsiConsole.Ask<string>("Enter the [green]CSV file name[/] to export to:", "inventory_export.csv");
+                csvManager.ExportToCsv(fileName);
+                AnsiConsole.MarkupLine($"[green]Successfully exported inventory to {Markup.Escape(fileName)}[/]");
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Error exporting to CSV: {Markup.Escape(ex.Message)}[/]");
+            }
+        }
+
+        static void ImportFromCsv()
+        {
+            AnsiConsole.Write(new Rule("[blue]Import from CSV[/]").RuleStyle("blue").Centered());
+
+            try
+            {
+                string fileName = AnsiConsole.Ask<string>("Enter the [green]CSV file name[/] to import from:", "inventory_import.csv");
+                
+                if (!File.Exists(fileName))
+                {
+                    AnsiConsole.MarkupLine($"[red]File '{Markup.Escape(fileName)}' not found.[/]");
+                    return;
+                }
+
+                if (AnsiConsole.Confirm("This will replace all existing inventory items. Continue?"))
+                {
+                    csvManager.ImportFromCsv(fileName);
+                    inventory = dataStorage.LoadItems(); // Reload inventory after import
+                    AnsiConsole.MarkupLine($"[green]Successfully imported inventory from {Markup.Escape(fileName)}[/]");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[yellow]Import cancelled.[/]");
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Error importing from CSV: {Markup.Escape(ex.Message)}[/]");
+            }
         }
     }
 }

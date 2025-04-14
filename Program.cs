@@ -1,8 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using Spectre.Console;
-using QuestPDF.Infrastructure; // <-- Add QuestPDF using
+using System.Data; // For DataTable
+// using Spectre.Console; // Comment out Spectre.Console
+using QuestPDF.Infrastructure;
+using Terminal.Gui; // Add Terminal.Gui
+using NStack; // For ustring
 
 namespace SimpleInventoryApp
 {
@@ -16,650 +20,773 @@ namespace SimpleInventoryApp
         // Instantiate the PDF generator
         static readonly PdfLabelGenerator pdfGenerator = new PdfLabelGenerator();
 
+        // --- Terminal.Gui Views ---
+        private static MenuBar? menu;
+        private static StatusBar? statusBar;
+        private static Window? mainWin; // Main content window
+        private static Label? statusLabel; // Label inside the status bar
+        private static TableView? inventoryTableView; // Table to display inventory
+
+
         static void Main(string[] args)
         {
             // --- QuestPDF Initialization ---
             QuestPDF.Settings.License = LicenseType.Community;
             // -------------------------------
 
-            // Load both data sets
+            // Load data first
             inventory = dataStorage.LoadItems();
             locations = dataStorage.LoadLocations();
 
-            AnsiConsole.Clear(); // Start with a clear screen
-            AnsiConsole.Write(
-                new FigletText("Inventory Mgr")
-                .Centered()
-                .Color(Spectre.Console.Color.Blue));
-            AnsiConsole.WriteLine();
 
-            bool dataChanged = false; // Flag to track if saving is needed
-            bool keepRunning = true;
+            Application.Init();
 
-            while (keepRunning)
+            var top = Application.Top;
+
+            // --- Main Window ---
+            // Occupies the space between MenuBar and StatusBar
+            mainWin = new Window("Inventory")
             {
-                AnsiConsole.Clear(); // Clear screen before showing top menu
-                AnsiConsole.Write(new Rule("[yellow]Main Menu[/]").RuleStyle("blue").LeftJustified());
+                X = 0,
+                Y = 1, // Below MenuBar
+                Width = Dim.Fill(),
+                Height = Dim.Fill(1) // Fill remaining space minus 1 for StatusBar
+            };
 
-                var topChoice = AnsiConsole.Prompt(
-                    new SelectionPrompt<string>()
-                        .Title("Select a category:")
-                        .PageSize(5)
-                        .AddChoices(new[] {
-                            "Items", "Dictionary", "Service", "Reports", "[red]Exit[/]"
-                        }));
+            // --- Menu Bar ---
+            menu = new MenuBar(new MenuBarItem[] {
+                new MenuBarItem ("_Items", new MenuItem [] {
+                    new MenuItem ("_List All", "", () => ListAllItems(), null, null, (Key)0),
+                    new MenuItem ("_Add New...", "", () => AddItem(), null, null, (Key)0),
+                    new MenuItem ("_Update Quantity...", "", () => UpdateItemQuantity(), null, null, (Key)0),
+                    new MenuItem ("_Update Location...", "", () => UpdateItemLocation(), null, null, (Key)0),
+                    new MenuItem ("_Delete Record...", "", () => DeleteItem(), null, null, (Key)0),
+                    new MenuItem ("Find by _Name...", "", () => FindItemByName(), null, null, (Key)0),
+                    new MenuItem ("Find by Inv _Num...", "", () => FindItemByInvNum(), null, null, (Key)0)
+                }),
+                new MenuBarItem ("_Dictionary", new MenuItem [] {
+                     new MenuBarItem ("_Locations", new MenuItem [] {
+                        new MenuItem ("_List", "", () => ListLocations(), null, null, (Key)0),
+                        new MenuItem ("_Add New...", "", () => AddLocation(), null, null, (Key)0),
+                        // Potential: Delete Location?
+                    })
+                }),
+                 new MenuBarItem ("_Service", new MenuItem [] {
+                     new MenuBarItem ("_CSV", new MenuItem [] {
+                        new MenuItem ("_Export...", "", () => ExportToCsv(), null, null, (Key)0),
+                        new MenuItem ("_Import...", "", () => ImportFromCsv(), null, null, (Key)0),
+                    })
+                }),
+                new MenuBarItem ("_Reports", new MenuItem [] {
+                     new MenuBarItem ("Generate _Labels PDF", new MenuItem [] {
+                        new MenuItem ("_All Items", "", () => GenerateLabelsForAllItems(), null, null, (Key)0),
+                        new MenuItem ("By _Location...", "", () => GenerateLabelsByLocation(), null, null, (Key)0),
+                        new MenuItem ("By Inv _Number...", "", () => GenerateLabelsByInventoryNumber(), null, null, (Key)0),
+                    })
+                }),
+                new MenuBarItem ("_File", new MenuItem [] {
+                    new MenuItem ("_Quit", "", () => Application.RequestStop(), null, null, Key.Q | Key.CtrlMask)
+                })
+            });
 
-                dataChanged = false; // Reset flag for each top-level action
+            // --- Status Bar ---
+            statusLabel = new Label("Ready") { AutoSize = false, Width = Dim.Fill(), TextAlignment = TextAlignment.Left };
+            statusBar = new StatusBar(new StatusItem[] {
+                // Shortcut to quit
+                new StatusItem(Key.Q | Key.CtrlMask, "~^Q~ Quit", () => Application.RequestStop()),
+                // Status Label added directly below
+            });
+            statusBar.Add(statusLabel); // Add the label to the status bar
 
-                switch (topChoice)
-                {
-                    case "Items":
-                        ShowItemsMenu(ref dataChanged);
-                        break;
-                    case "Dictionary":
-                        ShowDictionaryMenu(ref dataChanged);
-                        break;
-                    case "Service":
-                        ShowServiceMenu(ref dataChanged);
-                        break;
-                    case "Reports":
-                        ShowReportsMenu();
-                        break;
-                    case "[red]Exit[/]":
-                        keepRunning = false;
-                        break;
-                }
+            // --- Add Views to Toplevel ---
+            top.Add(menu, mainWin, statusBar);
 
-                // Save changes if any modifying action was taken within submenus
-                if (dataChanged)
-                {
-                    dataStorage.SaveItems(inventory);
-                    dataStorage.SaveLocations(locations); // Save locations too!
-                    AnsiConsole.MarkupLine("[green]Data saved successfully.[/]");
-                    Pause(); // Pause only after saving
-                }
-                else if (keepRunning) // Pause after non-modifying actions unless exiting
-                {
-                     // Don't pause if a sub-menu was exited immediately without action
-                     // (Requires more complex state tracking, or just accept the pause)
-                     // Simple approach: Always pause if not exiting and no data changed.
-                     // Consider if Pause() is needed after just viewing menus.
-                     // For now, let's pause unless Exiting.
-                     Pause();
-                }
+            // --- Initial Setup ---
+            // Let's display the inventory list initially
+            SetupInventoryTableView();
+            if (inventoryTableView != null)
+            {
+                 mainWin.Add(inventoryTableView); // Add table view to the main window
             }
+            ListAllItems(); // Load data into the table
+
+            // --- Run Application ---
+            Application.Run();
+            Application.Shutdown();
 
             // Final save on exit (optional, could rely on saves after each action)
             // dataStorage.SaveItems(inventory);
             // dataStorage.SaveLocations(locations);
-            AnsiConsole.MarkupLine("[green]Inventory saved. Goodbye![/]");
+             Console.WriteLine("Inventory saved. Goodbye!"); // Simple console message on exit
         }
 
-        // --- Sub-Menu Methods ---
-
-        static void ShowItemsMenu(ref bool dataChanged)
+        static void UpdateStatus(string message)
         {
-            AnsiConsole.Clear();
-            AnsiConsole.Write(new Rule("[green]Items Menu[/]").RuleStyle("green").LeftJustified());
+            if (statusLabel != null)
+            {
+                statusLabel.Text = message;
+                Application.DoEvents(); // Ensure status update is processed
+            }
+        }
 
-            var itemChoices = new List<string> {
-                "List All Items",
-                "Add New Item/Component",
-                "Update Item Quantity",
-                "Update Item Location",
-                "Delete Item Record",
-                "Find Item by Name",
-                "Find Item by Inventory Number",
-                 "[yellow]< Back[/]" // Option to go back
+        static void ShowMessage(string title, string message)
+        {
+             MessageBox.Query(title, message, "Ok");
+        }
+
+        static bool ConfirmAction(string title, string message)
+        {
+             // Ensure width fits message roughly
+             int width = Math.Max(title.Length, message.Split('\n').Max(s => s.Length)) + 10;
+             int height = message.Split('\n').Length + 5;
+             return MessageBox.Query(width, height, title, message, "Yes", "No") == 0; // 0 is the index of "Yes"
+        }
+
+        // --- Table View Setup and Population ---
+        static void SetupInventoryTableView()
+        {
+            if (inventoryTableView != null)
+            {
+                 inventoryTableView.Dispose(); // Dispose if exists
+            }
+
+            inventoryTableView = new TableView()
+            {
+                X = 0,
+                Y = 0,
+                Width = Dim.Fill(1), // Leave space for scrollbar
+                Height = Dim.Fill(), // Changed from Dim.Fill(1) to respect parent border
+                FullRowSelect = true, // Select the whole row
             };
 
-            // Disable adding/updating location if no locations defined
-            if (!locations.Any())
-            {
-                itemChoices.Remove("Add New Item/Component");
-                itemChoices.Remove("Update Item Location");
-                itemChoices.Insert(1, "[grey]Add New Item/Component (Add locations first)[/]"); // Show disabled option
-                itemChoices.Insert(3, "[grey]Update Item Location (Add locations first)[/]"); // Show disabled option
-            }
+            // Define columns matching InventoryItem properties
+            var dataTable = new DataTable();
+            dataTable.Columns.Add("Inv Num", typeof(string));
+            dataTable.Columns.Add("ID", typeof(int));
+            dataTable.Columns.Add("Name", typeof(string));
+            dataTable.Columns.Add("Description", typeof(string));
+            dataTable.Columns.Add("Qty", typeof(int));
+            dataTable.Columns.Add("Location", typeof(string));
+            dataTable.Columns.Add("Last Updated", typeof(string)); // Keep as string for display
+            inventoryTableView.Table = dataTable; // Assign the empty table structure initially
 
-
-            var choice = AnsiConsole.Prompt(
-                    new SelectionPrompt<string>()
-                        .Title("Item Actions:")
-                        .PageSize(10)
-                        .AddChoices(itemChoices)
-                        );
-
-            switch (choice)
-            {
-                case "List All Items":
-                    ListItems();
-                    break;
-                case "Add New Item/Component":
-                    if (locations.Any()) { AddItem(); dataChanged = true; }
-                    else { AnsiConsole.MarkupLine("[yellow]Please add at least one location first.[/]"); }
-                    break;
-                case "Update Item Quantity":
-                    UpdateItemQuantity(); dataChanged = true;
-                    break;
-                case "Update Item Location":
-                     if (locations.Any()) { UpdateItemLocation(); dataChanged = true; }
-                    else { AnsiConsole.MarkupLine("[yellow]Please add at least one location first.[/]"); }
-                    break;
-                case "Delete Item Record":
-                    DeleteItem(); dataChanged = true;
-                    break;
-                case "Find Item by Name":
-                    FindItemByName();
-                    break;
-                case "Find Item by Inventory Number":
-                    FindItemByInventoryNumber();
-                    break;
-                case string s when s.StartsWith("[grey]"): // Handle disabled options
-                     AnsiConsole.MarkupLine("[yellow]This option is disabled. Please add locations first.[/]");
-                     break;
-                case "[yellow]< Back[/]":
-                    return; // Return to main menu
-                default:
-                     AnsiConsole.MarkupLine($"[grey]Option '{choice}' selected.[/]");
-                     break;
-            }
-             // Don't pause here, pause is handled in the main loop after returning
+            // Event handling (optional for now)
+            inventoryTableView.CellActivated += (args) => {
+                 // Example: Show details of the selected item
+                 var table = args.Table;
+                 if(table != null && args.Row >= 0 && args.Row < table.Rows.Count) {
+                    try {
+                         // Get data directly from the DataTable to avoid issues with list ordering mismatches
+                         var row = table.Rows[args.Row];
+                         ShowMessage("Item Details",
+                             $"Inv#: {row["Inv Num"]}\n" +
+                             $"ID: {row["ID"]}\n" +
+                             $"Name: {row["Name"]}\n" +
+                             $"Desc: {row["Description"]}\n" +
+                             $"Qty: {row["Qty"]}\n" +
+                             $"Loc: {row["Location"]}\n" +
+                             $"Updated: {row["Last Updated"]}");
+                     } catch (Exception ex) {
+                         ShowMessage("Error", $"Failed to get item details: {ex.Message}");
+                     }
+                 }
+             };
         }
 
-        static void ShowDictionaryMenu(ref bool dataChanged)
+        static void PopulateInventoryTable(List<InventoryItem>? items = null)
         {
-             AnsiConsole.Clear();
-             AnsiConsole.Write(new Rule("[blue]Dictionary Menu[/]").RuleStyle("blue").LeftJustified());
+             if (inventoryTableView == null || inventoryTableView.Table == null) return;
 
-             var dictChoice = AnsiConsole.Prompt(
-                 new SelectionPrompt<string>()
-                     .Title("Dictionary Actions:")
-                     .PageSize(5)
-                     .AddChoices(new[] { "Locations", "[yellow]< Back[/]" })
-             );
+             var currentTable = inventoryTableView.Table;
+             currentTable.Rows.Clear(); // Clear existing rows
 
-             switch (dictChoice)
+             var itemsToList = items ?? inventory;
+             // Order items for display
+             itemsToList = itemsToList.OrderBy(i => i.InventoryNumber).ThenBy(i => i.Name).ToList();
+
+             foreach (var item in itemsToList)
              {
-                 case "Locations":
-                     ShowLocationsMenu(ref dataChanged);
-                     break;
-                 case "[yellow]< Back[/]":
-                     return; // Return to main menu
+                 currentTable.Rows.Add(
+                     item.InventoryNumber,
+                     item.Id,
+                     item.Name,
+                     item.Description,
+                     item.Quantity,
+                     item.Location,
+                     item.LastUpdated.ToString("yyyy-MM-dd HH:mm")
+                 );
              }
-             // Pause handled in main loop
+
+             inventoryTableView.Update(); // Update the view to reflect data changes
+             UpdateStatus($"Listed {currentTable.Rows.Count} items.");
         }
 
-        static void ShowLocationsMenu(ref bool dataChanged)
+
+        // --- Menu Action Implementations ---
+
+        static void ListAllItems()
         {
-             AnsiConsole.Clear();
-             AnsiConsole.Write(new Rule("[cyan]Locations Menu[/]").RuleStyle("cyan").LeftJustified());
-
-            var locChoice = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("Location Actions:")
-                    .PageSize(5)
-                    .AddChoices(new[] { "List Locations", "Add New Location", "[yellow]< Back[/]" })
-            );
-
-            switch (locChoice)
-            {
-                case "List Locations":
-                    ListLocations();
-                    break;
-                case "Add New Location":
-                    AddLocation();
-                    dataChanged = true;
-                    break;
-                case "[yellow]< Back[/]":
-                     // Instead of returning to Main, return to Dictionary menu
-                     // This requires restructuring the call stack or passing more state.
-                     // Simplest is returning to Main for now.
-                    return; // Return to the caller (Dictionary menu, which then returns to Main)
-            }
-            // Pause handled in main loop
-        }
-
-         static void ShowServiceMenu(ref bool dataChanged)
-         {
-             AnsiConsole.Clear();
-             AnsiConsole.Write(new Rule("[magenta]Service Menu[/]").RuleStyle("magenta").LeftJustified());
-
-             var serviceChoice = AnsiConsole.Prompt(
-                 new SelectionPrompt<string>()
-                     .Title("Service Actions:")
-                     .PageSize(5)
-                     .AddChoices(new[] { "CSV", "[yellow]< Back[/]" })
-             );
-
-              switch (serviceChoice)
-              {
-                  case "CSV":
-                      ShowCsvMenu(ref dataChanged);
-                      break;
-                  case "[yellow]< Back[/]":
-                      return; // Return to main menu
-              }
-              // Pause handled in main loop
-         }
-
-         static void ShowCsvMenu(ref bool dataChanged)
-         {
-              AnsiConsole.Clear();
-              AnsiConsole.Write(new Rule("[yellow]CSV Import/Export[/]").RuleStyle("yellow").LeftJustified());
-
-              var csvChoice = AnsiConsole.Prompt(
-                  new SelectionPrompt<string>()
-                      .Title("CSV Actions:")
-                      .PageSize(5)
-                      .AddChoices(new[] { "Export to CSV", "Import from CSV", "[yellow]< Back[/]" })
-              );
-
-              switch (csvChoice)
-              {
-                  case "Export to CSV":
-                      ExportToCsv();
-                      // Export doesn't change data flag
-                      break;
-                  case "Import from CSV":
-                      ImportFromCsv();
-                      dataChanged = true; // Import changes data
-                      break;
-                 case "[yellow]< Back[/]":
-                      // Return to the caller (Service menu, which then returns to Main)
-                     return;
-              }
-               // Pause handled in main loop
-         }
-
-         static void ShowReportsMenu()
-         {
-             AnsiConsole.Clear();
-             AnsiConsole.Write(new Rule("[green]Reports Menu[/]").RuleStyle("green").LeftJustified());
-
-             var reportChoice = AnsiConsole.Prompt(
-                 new SelectionPrompt<string>()
-                     .Title("Generate Labels PDF:")
-                     .PageSize(5)
-                     .AddChoices(new[] {
-                         "All Items",
-                         "By Location",
-                         "By Inventory Number",
-                         "[yellow]< Back[/]"
-                     })
-             );
-
-             switch (reportChoice)
-             {
-                 case "All Items":
-                     GenerateLabelsForAllItems();
-                     break;
-                 case "By Location":
-                     GenerateLabelsByLocation();
-                     break;
-                 case "By Inventory Number":
-                     GenerateLabelsByInventoryNumber();
-                     break;
-                 case "[yellow]< Back[/]":
-                     return; // Return to main menu
-             }
-             // Pause handled in main loop
-         }
-
-        // Placeholder methods for PDF generation
-        static void GenerateLabelsForAllItems()
-        {
-            AnsiConsole.MarkupLine("[cyan]Generating PDF labels for all items...[/]");
-            pdfGenerator.GenerateAllItemsReport(inventory);
-            // Pause handled by main loop
-        }
-
-        static void GenerateLabelsByLocation()
-        {
-            if (!locations.Any())
-            {
-                AnsiConsole.MarkupLine("[yellow]No locations defined. Cannot generate report by location.[/]");
-                return;
-            }
-
-            AnsiConsole.MarkupLine("[cyan]Select a location to generate labels for:[/]");
-            string selectedLocation = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("Select [green]location[/]:")
-                    .PageSize(10)
-                    .MoreChoicesText("[grey](Move up and down to reveal more locations)[/]")
-                    .AddChoices(locations.OrderBy(l => l))
-                );
-
-            AnsiConsole.MarkupLine($"[cyan]Generating PDF labels for location '{Markup.Escape(selectedLocation)}'...[/]");
-            pdfGenerator.GenerateLocationReport(inventory, selectedLocation);
-            // Pause handled by main loop
-        }
-
-        static void GenerateLabelsByInventoryNumber()
-        {
-            if (!inventory.Any())
-            {
-                AnsiConsole.MarkupLine("[yellow]Inventory is empty. Cannot generate report by inventory number.[/]");
-                return;
-            }
-
-            AnsiConsole.MarkupLine("[cyan]Enter the Inventory Number to generate labels for:[/]");
-            string invNum = AnsiConsole.Prompt(
-                new TextPrompt<string>("Enter [green]Inventory Number[/]:")
-                    .PromptStyle("cyan")
-                    .Validate(input => !string.IsNullOrWhiteSpace(input), "[red]Inventory Number cannot be empty.[/]")
-                );
-
-            AnsiConsole.MarkupLine($"[cyan]Generating PDF labels for Inventory # '{Markup.Escape(invNum)}'...[/]");
-            pdfGenerator.GenerateInventoryNumberReport(inventory, invNum);
-            // Pause handled by main loop
-        }
-
-        // --- Item Methods (ListItems, UpdateItemQuantity, DeleteItem, Find*) ---
-        // ListItems, DeleteItem, Find* - No changes needed
-        // UpdateItemQuantity - No changes needed
-
-        static void ListItems(List<InventoryItem>? itemsToList = null) // No changes needed
-        {
-            AnsiConsole.Write(new Rule("[green]Inventory List[/]").RuleStyle("green").Centered());
-            var items = itemsToList ?? inventory;
-            if (!items.Any()) { AnsiConsole.MarkupLine("[yellow]No items to display.[/]"); return; }
-            var table = new Table().Border(TableBorder.Rounded);
-            table.AddColumn("[b]Inv Num[/]").AddColumn("[b]ID[/]").AddColumn("[b]Name[/]").AddColumn("[b]Description[/]").AddColumn("[b]Qty[/]").AddColumn("[b]Location[/]").AddColumn("[b]Last Updated[/]");
-            foreach (var item in items.OrderBy(i => i.InventoryNumber).ThenBy(i => i.Name))
-            {
-                table.AddRow(Markup.Escape(item.InventoryNumber), item.Id.ToString(), Markup.Escape(item.Name), Markup.Escape(item.Description), item.Quantity.ToString(), Markup.Escape(item.Location), item.LastUpdated.ToString("yyyy-MM-dd HH:mm"));
-            }
-            AnsiConsole.Write(table);
+            if (inventoryTableView == null) return;
+            PopulateInventoryTable(inventory);
+            UpdateStatus("Showing all items.");
         }
 
         static void AddItem()
         {
-            AnsiConsole.Write(new Rule("[green]Add New Item/Component[/]").RuleStyle("green").Centered());
-
-            // Check if locations exist (should be guaranteed by menu logic, but belt-and-suspenders)
+             // Check if locations exist
             if (!locations.Any())
             {
-                AnsiConsole.MarkupLine("[red]Error: No locations available. Please add locations first.[/]");
-                // No Pause here, handled by main loop
+                ShowMessage("Error", "No locations available. Please add locations first via Dictionary -> Locations -> Add New.");
                 return;
             }
 
-            string inventoryNumber = AnsiConsole.Prompt(
-                new TextPrompt<string>("Enter [green]Inventory Number[/]:")
-                    .PromptStyle("cyan").Validate(invNum => !string.IsNullOrWhiteSpace(invNum), "[red]Inventory Number cannot be empty.[/]"));
+             // --- Create Add Item Dialog ---
+             var dialog = new Dialog("Add New Item/Component", 60, 18); // Title, Width, Height
 
-            var existingItems = inventory.Where(i => i.InventoryNumber.Equals(inventoryNumber, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (existingItems.Any())
+             int labelWidth = 15; // Fixed width for label column
+             int inputPadding = 1;
+             int currentY = 1;
+
+             // --- Columns ---
+             var labelColumn = new View() {
+                 X = 1,
+                 Y = 1,
+                 Width = labelWidth,
+                 Height = Dim.Fill(2) // Leave space for buttons
+             };
+             var inputColumn = new View() {
+                 X = Pos.Right(labelColumn) + inputPadding,
+                 Y = 1,
+                 Width = Dim.Fill(2),
+                 Height = Dim.Fill(2) // Leave space for buttons
+             };
+
+             // --- Add elements to columns ---
+             // Labels (added to labelColumn)
+             var invNumLabel = new Label(0, currentY, "Inv Num (*):");
+             var nameLabel = new Label(0, currentY + 2, "Name (*):");
+             var descLabel = new Label(0, currentY + 4, "Desc:");
+             var qtyLabel = new Label(0, currentY + 6, "Quantity (*):");
+             var locLabel = new Label(0, currentY + 8, "Location (*):");
+             labelColumn.Add(invNumLabel, nameLabel, descLabel, qtyLabel, locLabel);
+
+             // Input Fields (added to inputColumn, X=0 relative to inputColumn)
+             var invNumText = new TextField("") { X = 0, Y = invNumLabel.Y, Width = Dim.Fill() };
+             var nameText = new TextField("")   { X = 0, Y = nameLabel.Y, Width = Dim.Fill() };
+             var descText = new TextField("")   { X = 0, Y = descLabel.Y, Width = Dim.Fill() };
+             var qtyText = new TextField("1")    { X = 0, Y = qtyLabel.Y, Width = 10 }; // Smaller width for quantity
+             var locCombo = new ComboBox() {
+                 X = 0,
+                 Y = locLabel.Y,
+                 Width = Dim.Fill(),
+                 Height = 4,
+             };
+             var sortedLocations = locations.OrderBy(l => l).ToList();
+             locCombo.SetSource(sortedLocations);
+             if (sortedLocations.Any()) locCombo.SelectedItem = 0;
+             inputColumn.Add(invNumText, nameText, descText, qtyText, locCombo);
+
+            // Add columns to the dialog
+            dialog.Add(labelColumn, inputColumn);
+
+             bool itemAdded = false;
+             var okButton = new Button("OK", is_default: true);
+             okButton.Clicked += () => {
+                 // --- Validation ---
+                 if (string.IsNullOrWhiteSpace(invNumText.Text?.ToString())) {
+                     MessageBox.ErrorQuery("Validation Error", "Inventory Number cannot be empty.", "Ok");
+                     invNumText.SetFocus(); return;
+                 }
+                 if (string.IsNullOrWhiteSpace(nameText.Text?.ToString())) {
+                     MessageBox.ErrorQuery("Validation Error", "Name cannot be empty.", "Ok");
+                     nameText.SetFocus(); return;
+                 }
+                 if (!int.TryParse(qtyText.Text?.ToString(), out int quantity) || quantity < 0) {
+                     MessageBox.ErrorQuery("Validation Error", "Quantity must be a non-negative number.", "Ok");
+                     qtyText.SetFocus(); return;
+                 }
+                 if (locCombo.SelectedItem < 0 || locCombo.SelectedItem >= sortedLocations.Count) { // Check if a location is selected
+                      MessageBox.ErrorQuery("Validation Error", "Please select a valid location.", "Ok");
+                     locCombo.SetFocus(); return;
+                 }
+
+                 // --- Add Item Logic ---
+                var newItem = new InventoryItem
+                {
+                    Id = dataStorage.GetNextId(inventory),
+                    InventoryNumber = invNumText.Text.ToString()!.Trim(),
+                    Name = nameText.Text.ToString()!.Trim(),
+                    Description = descText.Text?.ToString()?.Trim() ?? string.Empty,
+                    Quantity = quantity,
+                    Location = sortedLocations[locCombo.SelectedItem], // Get selected location text
+                    LastUpdated = DateTime.UtcNow
+                };
+
+                inventory.Add(newItem);
+                try {
+                     dataStorage.SaveItems(inventory); // Save immediately
+                     // dataStorage.SaveLocations(locations); // Locations don't change here
+                     itemAdded = true;
+                     Application.RequestStop(); // Close the dialog
+                } catch (Exception ex) {
+                     MessageBox.ErrorQuery("Save Error", $"Failed to save item: {ex.Message}", "Ok");
+                }
+             };
+
+             var cancelButton = new Button("Cancel");
+             cancelButton.Clicked += () => {
+                 Application.RequestStop(); // Close the dialog
+             };
+
+             dialog.AddButton(okButton);
+             dialog.AddButton(cancelButton);
+
+             // Set focus to the first input field
+             dialog.Ready += () => invNumText.SetFocus();
+
+             Application.Run(dialog); // Run the dialog modally
+
+            if (itemAdded)
             {
-                AnsiConsole.MarkupLine($"[yellow]Inv# '{Markup.Escape(inventoryNumber)}' components:[/]");
-                ListItems(existingItems); AnsiConsole.WriteLine();
+                 PopulateInventoryTable(); // Refresh the main table
+                 UpdateStatus($"Item added successfully.");
+            } else {
+                 UpdateStatus("Add item cancelled or failed.");
             }
-            else
-            {
-                AnsiConsole.MarkupLine($"[yellow]First item for Inv# '{Markup.Escape(inventoryNumber)}'.[/]");
-            }
-
-            string name = AnsiConsole.Prompt(
-                new TextPrompt<string>("Enter component [green]name[/]:")
-                    .PromptStyle("cyan").Validate(n => !string.IsNullOrWhiteSpace(n), "[red]Name cannot be empty.[/]"));
-
-            string description = AnsiConsole.Ask<string>("Enter component [green]description[/] (optional):", string.Empty);
-
-            int quantity = AnsiConsole.Prompt(
-                new TextPrompt<int>("Enter item [green]quantity[/]:")
-                    .PromptStyle("cyan").DefaultValue(1).ValidationErrorMessage("[red]Invalid number >= 0.[/]").Validate(q => q >= 0));
-
-            // --- *** Location Selection *** ---
-            string selectedLocation = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("Select item [green]location[/]:")
-                    .PageSize(10)
-                    .MoreChoicesText("[grey](Move up and down to reveal more locations)[/]")
-                    .AddChoices(locations.OrderBy(l => l)) // Use the loaded locations list, sorted
-                );
-            // --- *** End Location Selection *** ---
-
-            var newItem = new InventoryItem
-            {
-                Id = dataStorage.GetNextId(inventory),
-                InventoryNumber = inventoryNumber.Trim(),
-                Name = name.Trim(),
-                Description = description.Trim(),
-                Quantity = quantity,
-                Location = selectedLocation, // Assign the selected location
-                LastUpdated = DateTime.UtcNow
-            };
-
-            inventory.Add(newItem);
-            AnsiConsole.MarkupLine($"[bold green]Component '{Markup.Escape(newItem.Name)}' added for Inv# {Markup.Escape(newItem.InventoryNumber)} at '{Markup.Escape(selectedLocation)}' (ID: {newItem.Id}).[/]");
-            // No Pause here, handled by main loop
         }
 
-        static void UpdateItemQuantity() // No changes needed
+        static void UpdateItemQuantity()
         {
-            AnsiConsole.Write(new Rule("[blue]Update Item Quantity[/]").RuleStyle("blue").Centered());
-            if (!inventory.Any()) { AnsiConsole.MarkupLine("[yellow]Inventory empty.[/]"); return; }
-            int idToUpdate = AnsiConsole.Prompt(new TextPrompt<int>("Enter [green]Record ID[/] to update:").PromptStyle("cyan").ValidationErrorMessage("[red]Invalid ID.[/]"));
-            var itemToUpdate = inventory.FirstOrDefault(item => item.Id == idToUpdate);
-            if (itemToUpdate == null) { AnsiConsole.MarkupLine($"[red]Error: ID {idToUpdate} not found.[/]"); return; }
-            AnsiConsole.MarkupLine($"Updating: [yellow]Inv# {Markup.Escape(itemToUpdate.InventoryNumber)} / {Markup.Escape(itemToUpdate.Name)}[/] (Current qty: {itemToUpdate.Quantity})");
-            int newQuantity = AnsiConsole.Prompt(new TextPrompt<int>($"Enter [green]new quantity[/] for Record ID {itemToUpdate.Id}:").PromptStyle("cyan").ValidationErrorMessage("[red]Invalid number >= 0.[/]").Validate(q => q >= 0));
-            itemToUpdate.Quantity = newQuantity; itemToUpdate.LastUpdated = DateTime.UtcNow;
-            AnsiConsole.MarkupLine($"[bold green]Quantity for item {itemToUpdate.Id} updated to {newQuantity}.[/]");
-            // No Pause here, handled by main loop
+            UpdateStatus("Update Quantity: Not Implemented Yet");
+            ShowMessage("Info", "Functionality to update item quantity is not yet implemented.");
+            // TODO: Implement using a dialog similar to AddItem or by selecting from the table
+            // 1. Get Item ID (prompt or selection from TableView)
+            // 2. Show current quantity in a dialog
+            // 3. Prompt for new quantity (TextField)
+            // 4. Validate
+            // 5. Update inventory list
+            // 6. Save
+            // 7. Refresh table
         }
 
-        // --- New Method: Update Item Location ---
         static void UpdateItemLocation()
         {
-            AnsiConsole.Write(new Rule("[blue]Update Item Location[/]").RuleStyle("blue").Centered());
-
-            if (!inventory.Any())
-            {
-                AnsiConsole.MarkupLine("[yellow]Inventory is empty. Nothing to update.[/]");
-                return;
-            }
-            if (!locations.Any()) // Redundant check, but safe
-            {
-                AnsiConsole.MarkupLine("[yellow]No locations defined. Cannot update location.[/]");
-                return;
-            }
-
-            // Use the unique Record ID for targeting the update
-            int idToUpdate = AnsiConsole.Prompt(
-                 new TextPrompt<int>("Enter the unique [green]Record ID[/] of the item record to update:")
-                    .PromptStyle("cyan").ValidationErrorMessage("[red]Invalid ID.[/]"));
-
-            var itemToUpdate = inventory.FirstOrDefault(item => item.Id == idToUpdate);
-
-            if (itemToUpdate == null)
-            {
-                AnsiConsole.MarkupLine($"[red]Error: Item record with ID {idToUpdate} not found.[/]");
-                return;
-            }
-
-            AnsiConsole.MarkupLine($"Updating location for: [yellow]Inv# {Markup.Escape(itemToUpdate.InventoryNumber)} / {Markup.Escape(itemToUpdate.Name)}[/]");
-            AnsiConsole.MarkupLine($"Current location: [yellow]{Markup.Escape(itemToUpdate.Location)}[/]");
-
-            // --- Location Selection ---
-            string newLocation = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("Select the [green]new location[/]:")
-                    .PageSize(10)
-                    .MoreChoicesText("[grey](Scroll for more locations)[/]")
-                    .AddChoices(locations.OrderBy(l => l)) // Use the loaded locations
-                );
-            // --- End Location Selection ---
-
-            itemToUpdate.Location = newLocation;
-            itemToUpdate.LastUpdated = DateTime.UtcNow;
-
-            AnsiConsole.MarkupLine($"[bold green]Location for item record {itemToUpdate.Id} (Inv# {Markup.Escape(itemToUpdate.InventoryNumber)}) updated to '{Markup.Escape(newLocation)}'.[/]");
-            // No Pause here, handled by main loop
+            UpdateStatus("Update Location: Not Implemented Yet");
+             ShowMessage("Info", "Functionality to update item location is not yet implemented.");
+            // TODO: Implement similar to UpdateItemQuantity
+             // 1. Get Item ID (prompt or selection from TableView)
+             // 2. Show current location
+             // 3. Show ComboBox with available locations in a dialog
+             // 4. Update inventory list
+             // 5. Save
+             // 6. Refresh table
         }
 
-
-        static void DeleteItem() // No changes needed
+        static void DeleteItem()
         {
-            AnsiConsole.Write(new Rule("[red]Delete Item Record[/]").RuleStyle("red").Centered());
-            if (!inventory.Any()) { AnsiConsole.MarkupLine("[yellow]Inventory empty.[/]"); return; }
-            int idToDelete = AnsiConsole.Prompt(new TextPrompt<int>("Enter [green]Record ID[/] to delete:").PromptStyle("cyan").ValidationErrorMessage("[red]Invalid ID.[/]"));
-            var itemToDelete = inventory.FirstOrDefault(item => item.Id == idToDelete);
-            if (itemToDelete == null) { AnsiConsole.MarkupLine($"[red]Error: ID {idToDelete} not found.[/]"); return; }
-            AnsiConsole.MarkupLine($"Selected: [yellow]{Markup.Escape(itemToDelete.ToString())}[/]");
-            if (AnsiConsole.Confirm($"[red]Delete[/] this specific item record?"))
-            {
-                inventory.Remove(itemToDelete); AnsiConsole.MarkupLine($"[bold green]Item record {idToDelete} deleted.[/]");
-            }
-            else { AnsiConsole.MarkupLine("Deletion cancelled."); }
-            // No Pause here, handled by main loop
+            UpdateStatus("Delete Item: Not Implemented Yet");
+             ShowMessage("Info", "Functionality to delete item is not yet implemented.");
+            // TODO: Implement
+            // 1. Get Item ID (prompt or selection from TableView)
+            // 2. Get item details for confirmation message
+            // 3. Confirm deletion with ConfirmAction
+            // 4. Remove item from inventory list
+            // 5. Save
+            // 6. Refresh table
         }
 
-        static void FindItemByName() // No changes needed
-        {
-            AnsiConsole.Write(new Rule("[cyan]Find Item by Name[/]").RuleStyle("cyan").Centered());
-            if (!inventory.Any()) { AnsiConsole.MarkupLine("[yellow]Inventory empty.[/]"); return; }
-            string searchTerm = AnsiConsole.Ask<string>("Enter component [green]name[/] (or part) to search:").Trim();
-            if (string.IsNullOrWhiteSpace(searchTerm)) { AnsiConsole.MarkupLine("[yellow]Search term empty.[/]"); return; }
-            var foundItems = inventory.Where(item => item.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (!foundItems.Any()) { AnsiConsole.MarkupLine($"[yellow]No items found matching '{Markup.Escape(searchTerm)}'.[/]"); }
-            else { AnsiConsole.MarkupLine($"[green]Found {foundItems.Count} matching '{Markup.Escape(searchTerm)}':[/]"); ListItems(foundItems); }
-            // No Pause here, handled by main loop
-        }
+         static void FindItemByName()
+         {
+             var dialog = new Dialog("Find by Name", 40, 7);
+             int labelWidth = 15;
+             int inputPadding = 1;
 
-        static void FindItemByInventoryNumber() // No changes needed
-        {
-            AnsiConsole.Write(new Rule("[cyan]Find Item by Inventory Number[/]").RuleStyle("cyan").Centered());
-            if (!inventory.Any()) { AnsiConsole.MarkupLine("[yellow]Inventory empty.[/]"); return; }
-            string searchTerm = AnsiConsole.Ask<string>("Enter [green]Inventory Number[/] to search:").Trim();
-            if (string.IsNullOrWhiteSpace(searchTerm)) { AnsiConsole.MarkupLine("[yellow]Search term empty.[/]"); return; }
-            var foundItems = inventory.Where(item => item.InventoryNumber.Equals(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (!foundItems.Any()) { AnsiConsole.MarkupLine($"[yellow]No items found with Inv# '{Markup.Escape(searchTerm)}'.[/]"); }
-            else { AnsiConsole.MarkupLine($"[green]Found {foundItems.Count} for Inv# '{Markup.Escape(searchTerm)}':[/]"); ListItems(foundItems); }
-            // No Pause here, handled by main loop
-        }
+             var labelColumn = new View() { X = 1, Y = 1, Width = labelWidth, Height = 1 };
+             var inputColumn = new View() { X = Pos.Right(labelColumn) + inputPadding, Y = 1, Width = Dim.Fill(2), Height = 1 };
 
+             var nameLabel = new Label(0, 0, "Name contains:");
+             var nameText = new TextField("") { X = 0, Y = 0, Width = Dim.Fill() };
 
-        // --- New Location Management Methods ---
+             labelColumn.Add(nameLabel);
+             inputColumn.Add(nameText);
+             dialog.Add(labelColumn, inputColumn);
+
+             string? searchTerm = null;
+             var findButton = new Button("Find", is_default: true);
+             findButton.Clicked += () => {
+                 var input = nameText.Text?.ToString()?.Trim();
+                 if (!string.IsNullOrWhiteSpace(input))
+                 {
+                     searchTerm = input;
+                     Application.RequestStop();
+                 } else {
+                     MessageBox.ErrorQuery("Input Required", "Please enter text to search for.", "Ok");
+                     nameText.SetFocus();
+                 }
+             };
+             var cancelButton = new Button("Cancel");
+             cancelButton.Clicked += () => { Application.RequestStop(); };
+
+             dialog.AddButton(findButton);
+             dialog.AddButton(cancelButton);
+             dialog.Ready += () => nameText.SetFocus();
+
+             Application.Run(dialog);
+
+             if (searchTerm != null)
+             {
+                 var results = inventory.Where(i => i.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+                 PopulateInventoryTable(results);
+                 UpdateStatus($"Found {results.Count} items matching '{searchTerm}'.");
+             } else {
+                  UpdateStatus("Find by name cancelled.");
+             }
+         }
+
+         static void FindItemByInvNum()
+         {
+             var dialog = new Dialog("Find by Inv Num", 40, 7);
+             int labelWidth = 10; // Adjusted width
+             int inputPadding = 1;
+
+             var labelColumn = new View() { X = 1, Y = 1, Width = labelWidth, Height = 1 };
+             var inputColumn = new View() { X = Pos.Right(labelColumn) + inputPadding, Y = 1, Width = Dim.Fill(2), Height = 1 };
+
+             var invNumLabel = new Label(0, 0, "Inv Num:");
+             var invNumText = new TextField("") { X = 0, Y = 0, Width = Dim.Fill() };
+
+             labelColumn.Add(invNumLabel);
+             inputColumn.Add(invNumText);
+             dialog.Add(labelColumn, inputColumn);
+
+             string? searchTerm = null;
+             var findButton = new Button("Find", is_default: true);
+             findButton.Clicked += () => {
+                 var input = invNumText.Text?.ToString()?.Trim();
+                 if (!string.IsNullOrWhiteSpace(input))
+                 {
+                     searchTerm = input;
+                     Application.RequestStop();
+                 } else {
+                     MessageBox.ErrorQuery("Input Required", "Please enter an Inventory Number.", "Ok");
+                     invNumText.SetFocus();
+                 }
+             };
+             var cancelButton = new Button("Cancel");
+             cancelButton.Clicked += () => { Application.RequestStop(); };
+
+             dialog.AddButton(findButton);
+             dialog.AddButton(cancelButton);
+             dialog.Ready += () => invNumText.SetFocus();
+
+             Application.Run(dialog);
+
+             if (searchTerm != null)
+             {
+                 var results = inventory.Where(i => i.InventoryNumber.Equals(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+                 PopulateInventoryTable(results);
+                 UpdateStatus($"Found {results.Count} items with Inv# '{searchTerm}'.");
+             } else {
+                 UpdateStatus("Find by inventory number cancelled.");
+             }
+         }
+
 
         static void ListLocations()
         {
-            AnsiConsole.Write(new Rule("[blue]Office Locations[/]").RuleStyle("blue").Centered());
+             // Display locations in a ListView within a dialog
+             var dialog = new Dialog("Locations List", 40, 15);
+             var sortedLocations = locations.OrderBy(l => l).ToList();
+             var listView = new ListView(sortedLocations) {
+                 X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(1) // Fill space except button
+             };
+             var closeButton = new Button("Close", is_default: true);
+             closeButton.Clicked += () => Application.RequestStop();
 
-            if (!locations.Any())
-            {
-                AnsiConsole.MarkupLine("[yellow]No locations have been defined yet.[/]");
-            }
-            else
-            {
-                AnsiConsole.MarkupLine("Defined locations:");
-                // Sort locations for display consistency
-                foreach (var location in locations.OrderBy(l => l))
-                {
-                    AnsiConsole.MarkupLine($" - [cyan]{Markup.Escape(location)}[/]");
-                }
-            }
-            // No Pause here, handled by main loop
+             dialog.Add(listView);
+             dialog.AddButton(closeButton);
+             dialog.Ready += () => listView.SetFocus(); // Focus the list on open
+
+             Application.Run(dialog);
+             UpdateStatus("Displayed locations list.");
         }
 
         static void AddLocation()
         {
-            AnsiConsole.Write(new Rule("[blue]Add New Location[/]").RuleStyle("blue").Centered());
+            var dialog = new Dialog("Add New Location", 40, 7);
+            int labelWidth = 15;
+            int inputPadding = 1;
 
-            string newLocation = AnsiConsole.Prompt(
-               new TextPrompt<string>("Enter the name for the [green]new location[/]:")
-                   .PromptStyle("cyan")
-                   .Validate(loc => // First validation: not empty
-                   {
-                       return !string.IsNullOrWhiteSpace(loc)
-                           ? ValidationResult.Success()
-                           : ValidationResult.Error("[red]Location name cannot be empty.[/]");
-                   })
-                   .Validate(loc => // Second validation: check for duplicates
-                   {
-                       // 'loc' here is the input value from the prompt
-                       bool exists = locations.Contains(loc.Trim(), StringComparer.OrdinalIgnoreCase);
-                       if (!exists)
-                       {
-                           return ValidationResult.Success();
-                       }
-                       else
-                       {
-                           // Now 'loc' is accessible to be used in the error message
-                           return ValidationResult.Error($"[red]Location '[yellow]{Markup.Escape(loc.Trim())}[/]' already exists.[/]");
-                       }
-                   }) // End of second Validate
-               ); // End of Prompt
+            var labelColumn = new View() { X = 1, Y = 1, Width = labelWidth, Height = 1 };
+            var inputColumn = new View() { X = Pos.Right(labelColumn) + inputPadding, Y = 1, Width = Dim.Fill(2), Height = 1 };
 
-            // Trim before adding to ensure consistency
-            string trimmedLocation = newLocation.Trim();
-            locations.Add(trimmedLocation);
-            // Optionally re-sort the list after adding
-            // locations.Sort(StringComparer.OrdinalIgnoreCase);
-            AnsiConsole.MarkupLine($"[bold green]Location '[yellow]{Markup.Escape(trimmedLocation)}[/]' added successfully.[/]");
-            // No Pause here, handled by main loop
+            var nameLabel = new Label(0, 0, "Location Name:");
+            var nameText = new TextField("") { X = 0, Y = 0, Width = Dim.Fill() };
+
+            labelColumn.Add(nameLabel);
+            inputColumn.Add(nameText);
+            dialog.Add(labelColumn, inputColumn);
+
+            bool locationAdded = false;
+            var okButton = new Button("OK", is_default: true);
+            okButton.Clicked += () => {
+                var newLoc = nameText.Text?.ToString()?.Trim();
+                 if (string.IsNullOrWhiteSpace(newLoc))
+                 {
+                     MessageBox.ErrorQuery("Validation Error", "Location name cannot be empty.", "Ok");
+                     nameText.SetFocus(); return;
+                 }
+                 if (locations.Contains(newLoc, StringComparer.OrdinalIgnoreCase))
+                 {
+                      MessageBox.ErrorQuery("Validation Error", $"Location '{newLoc}' already exists.", "Ok");
+                      nameText.SelectAll(); nameText.SetFocus(); return;
+                 }
+
+                 locations.Add(newLoc);
+                 locations.Sort(); // Keep the list sorted
+                try {
+                     dataStorage.SaveLocations(locations); // Save immediately
+                     locationAdded = true;
+                     Application.RequestStop();
+                } catch (Exception ex) {
+                     MessageBox.ErrorQuery("Save Error", $"Failed to save location: {ex.Message}", "Ok");
+                }
+            };
+
+             var cancelButton = new Button("Cancel");
+             cancelButton.Clicked += () => {
+                 Application.RequestStop();
+             };
+
+             dialog.AddButton(okButton);
+             dialog.AddButton(cancelButton);
+             dialog.Ready += () => nameText.SetFocus();
+
+             Application.Run(dialog);
+
+             if(locationAdded) {
+                 UpdateStatus($"Location added successfully.");
+             } else {
+                 UpdateStatus("Add location cancelled or failed.");
+             }
         }
 
-        // --- Helper ---
-        static void Pause() // No changes needed
-        {
-            AnsiConsole.MarkupLine("\n[grey]Press Enter to continue...[/]");
-            Console.ReadLine();
-        }
 
         static void ExportToCsv()
         {
-            AnsiConsole.Write(new Rule("[blue]Export to CSV[/]").RuleStyle("blue").Centered());
-            
-            if (!inventory.Any())
-            {
-                AnsiConsole.MarkupLine("[yellow]No items to export.[/]");
-                return;
-            }
+             var saveDialog = new SaveDialog("Export CSV", "Enter filename for CSV export");
+             // saveDialog.DirectoryPath = ...; // Set initial directory if desired
+             saveDialog.FilePath = (ustring)$"InventoryExport_{DateTime.Now:yyyyMMdd_HHmmss}.csv"; // Default name
 
-            try
-            {
-                string fileName = AnsiConsole.Ask<string>("Enter the [green]CSV file name[/] to export to:", "inventory_export.csv");
-                csvManager.ExportToCsv(fileName);
-                AnsiConsole.MarkupLine($"[green]Successfully exported inventory to {Markup.Escape(fileName)}[/]");
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine($"[red]Error exporting to CSV: {Markup.Escape(ex.Message)}[/]");
-            }
+             Application.Run(saveDialog);
+
+             if (!saveDialog.Canceled && saveDialog.FilePath != null)
+             {
+                 string filePath = saveDialog.FilePath.ToString()!;
+                 try
+                 {
+                     UpdateStatus("Exporting to CSV...");
+                     csvManager.ExportToCsv(filePath);
+                     ShowMessage("Export Successful", $"Inventory exported to '{Path.GetFileName(filePath)}'.");
+                     UpdateStatus("Exported inventory to CSV.");
+                 }
+                 catch (Exception ex)
+                 {
+                      ShowMessage("Export Error", $"Failed to export inventory: {ex.Message}");
+                      UpdateStatus("CSV export failed.");
+                 }
+             }
+             else
+             {
+                 UpdateStatus("CSV export cancelled.");
+             }
         }
 
         static void ImportFromCsv()
         {
-            AnsiConsole.Write(new Rule("[blue]Import from CSV[/]").RuleStyle("blue").Centered());
+             var openDialog = new OpenDialog("Import CSV", "Select CSV file to import") { AllowsMultipleSelection = false };
+            // openDialog.AllowedFileTypes = new[] { ".csv" }; // API might differ or not exist
 
-            try
-            {
-                string fileName = AnsiConsole.Ask<string>("Enter the [green]CSV file name[/] to import from:", "inventory_import.csv");
-                
-                if (!File.Exists(fileName))
-                {
-                    AnsiConsole.MarkupLine($"[red]File '{Markup.Escape(fileName)}' not found.[/]");
-                    return;
-                }
+             Application.Run(openDialog);
 
-                if (AnsiConsole.Confirm("This will replace all existing inventory items. Continue?"))
-                {
-                    csvManager.ImportFromCsv(fileName);
-                    inventory = dataStorage.LoadItems(); // Reload inventory after import
-                    AnsiConsole.MarkupLine($"[green]Successfully imported inventory from {Markup.Escape(fileName)}[/]");
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[yellow]Import cancelled.[/]");
-                }
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine($"[red]Error importing from CSV: {Markup.Escape(ex.Message)}[/]");
-            }
+             if (!openDialog.Canceled && openDialog.FilePaths.Count > 0)
+             {
+                 string filePath = openDialog.FilePaths[0];
+                 UpdateStatus("Importing from CSV...");
+                 try
+                 {
+                     // CsvManager.ImportFromCsv handles loading, merging/assigning IDs, saving items and locations
+                     csvManager.ImportFromCsv(filePath);
+
+                     // Reload data from storage to reflect changes
+                     inventory = dataStorage.LoadItems();
+                     locations = dataStorage.LoadLocations();
+
+                     // Refresh the UI
+                     PopulateInventoryTable();
+
+                     ShowMessage("Import Complete", $"Import process finished from '{Path.GetFileName(filePath)}'. Check table for results.");
+                     UpdateStatus("Import process complete.");
+
+                 }
+                 catch (Exception ex)
+                 {
+                      ShowMessage("Import Error", $"Failed to import from '{Path.GetFileName(filePath)}': {ex.Message}");
+                      UpdateStatus("CSV import failed.");
+                 }
+             }
+             else
+             {
+                  UpdateStatus("CSV import cancelled.");
+             }
         }
+
+        // --- Report Generation ---
+         static void GenerateLabelsForAllItems()
+         {
+             UpdateStatus("Generating PDF for all items...");
+             try {
+                 pdfGenerator.GenerateAllItemsReport(inventory);
+                 ShowMessage("PDF Generation", "Generated PDF for all items. Check application folder.");
+                 UpdateStatus("PDF generation for all items complete.");
+             } catch (Exception ex) {
+                 ShowMessage("PDF Error", $"Failed to generate PDF: {ex.Message}");
+                 UpdateStatus("PDF generation failed.");
+             }
+         }
+
+         static void GenerateLabelsByLocation()
+         {
+             if (!locations.Any())
+             {
+                 ShowMessage("Error", "No locations defined. Cannot generate report by location.");
+                 return;
+             }
+
+             var dialog = new Dialog("Select Location", 40, 15); // Increased height
+             var listLabel = new Label("Select Location:") { X = 1, Y = 1 };
+             var sortedLocations = locations.OrderBy(l => l).ToList();
+             var locationListView = new ListView(sortedLocations) {
+                 X = 1, Y = Pos.Bottom(listLabel),
+                 Width = Dim.Fill(2), Height = Dim.Fill(2) // Fill available space
+             };
+
+             string? selectedLocation = null;
+             var okButton = new Button("OK", is_default: true);
+             okButton.Clicked += () => {
+                 if (locationListView.SelectedItem >= 0 && locationListView.SelectedItem < sortedLocations.Count)
+                 {
+                     selectedLocation = sortedLocations[locationListView.SelectedItem];
+                     Application.RequestStop();
+                 } else {
+                     MessageBox.ErrorQuery("Selection Required", "Please select a location from the list.", "Ok");
+                 }
+             };
+             var cancelButton = new Button("Cancel");
+             cancelButton.Clicked += () => {
+                 Application.RequestStop();
+             };
+
+             dialog.Add(listLabel, locationListView);
+             dialog.AddButton(okButton);
+             dialog.AddButton(cancelButton);
+             dialog.Ready += () => locationListView.SetFocus();
+
+             Application.Run(dialog);
+
+             if (!string.IsNullOrEmpty(selectedLocation))
+             {
+                  UpdateStatus($"Generating PDF labels for location '{selectedLocation}'...");
+                 try {
+                      pdfGenerator.GenerateLocationReport(inventory, selectedLocation);
+                      ShowMessage("PDF Generation", $"Generated PDF for location '{selectedLocation}'. Check application folder.");
+                      UpdateStatus($"PDF generation for location '{selectedLocation}' complete.");
+                  } catch (Exception ex) {
+                      ShowMessage("PDF Error", $"Failed to generate PDF: {ex.Message}");
+                      UpdateStatus("PDF generation failed.");
+                  }
+             } else {
+                 UpdateStatus("PDF generation by location cancelled.");
+             }
+         }
+
+         static void GenerateLabelsByInventoryNumber()
+         {
+              if (!inventory.Any())
+              {
+                  ShowMessage("Error", "Inventory is empty. Cannot generate report by inventory number.");
+                  return;
+              }
+
+              var dialog = new Dialog("Enter Inventory Number", 40, 7);
+              int labelWidth = 18; // Adjusted width
+              int inputPadding = 1;
+
+              var labelColumn = new View() { X = 1, Y = 1, Width = labelWidth, Height = 1 };
+              var inputColumn = new View() { X = Pos.Right(labelColumn) + inputPadding, Y = 1, Width = Dim.Fill(2), Height = 1 };
+
+              var invNumLabel = new Label(0, 0, "Inventory Number:");
+              var invNumText = new TextField("") { X = 0, Y = 0, Width = Dim.Fill() };
+
+              labelColumn.Add(invNumLabel);
+              inputColumn.Add(invNumText);
+              dialog.Add(labelColumn, inputColumn);
+
+              string? selectedInvNum = null;
+              var okButton = new Button("OK", is_default: true);
+              okButton.Clicked += () => {
+                  var input = invNumText.Text?.ToString()?.Trim();
+                  if (!string.IsNullOrWhiteSpace(input))
+                  {
+                      selectedInvNum = input;
+                      Application.RequestStop();
+                  } else {
+                       MessageBox.ErrorQuery("Input Required", "Please enter an Inventory Number.", "Ok");
+                       invNumText.SetFocus();
+                  }
+              };
+               var cancelButton = new Button("Cancel");
+               cancelButton.Clicked += () => {
+                   Application.RequestStop();
+               };
+
+               dialog.AddButton(okButton);
+               dialog.AddButton(cancelButton);
+               dialog.Ready += () => invNumText.SetFocus();
+
+               Application.Run(dialog);
+
+               if (!string.IsNullOrEmpty(selectedInvNum))
+               {
+                    UpdateStatus($"Generating PDF labels for Inv# '{selectedInvNum}'...");
+                    try {
+                         pdfGenerator.GenerateInventoryNumberReport(inventory, selectedInvNum);
+                         ShowMessage("PDF Generation", $"Generated PDF for Inv# '{selectedInvNum}'. Check application folder.");
+                         UpdateStatus($"PDF generation for Inv# '{selectedInvNum}' complete.");
+                     } catch (Exception ex) {
+                         ShowMessage("PDF Error", $"Failed to generate PDF: {ex.Message}");
+                         UpdateStatus("PDF generation failed.");
+                     }
+               } else {
+                   UpdateStatus("PDF generation by inventory number cancelled.");
+               }
+         }
+
+
+        #region Spectre Console Methods (Commented Out)
+        /*
+        // Commented out or removed Spectre.Console specific methods like:
+        // static void ShowItemsMenu(ref bool dataChanged) { ... }
+        // static void ShowDictionaryMenu(ref bool dataChanged) { ... }
+        // static void ShowLocationsMenu(ref bool dataChanged) { ... }
+        // static void ShowServiceMenu(ref bool dataChanged) { ... }
+        // static void ShowCsvMenu(ref bool dataChanged) { ... }
+        // static void ShowReportsMenu() { ... }
+        // static void Pause() { ... }
+        // Original AddItem, ListItems, etc. using Spectre are implicitly replaced by Terminal.Gui versions
+        */
+        #endregion
+
+
     }
 }

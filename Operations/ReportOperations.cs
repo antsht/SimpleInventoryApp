@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Terminal.Gui;
 using SimpleInventoryApp.UI;
@@ -24,17 +26,47 @@ namespace SimpleInventoryApp.Operations
             pdfGenerator = generator;
         }
         
+        // --- Helper to open folder ---
+        private static void OpenFolderContainingFile(string filePath)
+        {
+            string? directoryPath = Path.GetDirectoryName(filePath);
+
+            if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath))
+            {
+                UserInterface.ShowMessage("Open Folder Error", $"Could not determine or find directory: {directoryPath ?? "(null)"}");
+                return;
+            }
+
+            try
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = directoryPath,
+                    UseShellExecute = true // IMPORTANT: Lets OS handle opening folder
+                };
+                Process.Start(startInfo);
+            }
+            catch (Exception ex)
+            {
+                // Log or show a more specific error if needed
+                UserInterface.ShowMessage("Open Folder Error", $"Failed to open folder: {ex.Message}");
+            }
+        }
+        // -----------------------------
+
         public static void GenerateLabelsForAllItems()
         {
             try
             {
                 string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 string filename = $"InventoryLabels_All_{timestamp}.pdf";
+                string fullPath = Path.Combine(Environment.CurrentDirectory, filename);
                 string title = "Inventory Labels - All Items";
                 
-                pdfGenerator.GenerateLabels(inventory, filename, title);
-                UserInterface.ShowMessage("PDF Generated", $"Labels generated successfully as:\n{filename}");
+                pdfGenerator.GenerateLabels(inventory, fullPath, title);
+                UserInterface.ShowMessage("PDF Generated", $"Labels generated successfully as:\n{fullPath}");
                 UserInterface.UpdateStatus($"Generated labels for {inventory.Count} items.");
+                OpenFolderContainingFile(fullPath);
             }
             catch (Exception ex)
             {
@@ -103,11 +135,13 @@ namespace SimpleInventoryApp.Operations
                         string safeLocation = string.Join("_", selectedLocation.Split(Path.GetInvalidFileNameChars())); // Sanitize filename
                         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                         string filename = $"InventoryLabels_Location_{safeLocation}_{timestamp}.pdf";
+                        string fullPath = Path.Combine(Environment.CurrentDirectory, filename);
                         string title = $"Inventory Labels - Location: {selectedLocation}";
                         
-                        pdfGenerator.GenerateLabels(filteredItems, filename, title);
-                        UserInterface.ShowMessage("PDF Generated", $"Labels generated successfully as:\n{filename}");
+                        pdfGenerator.GenerateLabels(filteredItems, fullPath, title);
+                        UserInterface.ShowMessage("PDF Generated", $"Labels generated successfully as:\n{fullPath}");
                         UserInterface.UpdateStatus($"Generated labels for {filteredItems.Count} items at location: {selectedLocation}.");
+                        OpenFolderContainingFile(fullPath);
                     }
                     catch (Exception ex)
                     {
@@ -184,13 +218,15 @@ namespace SimpleInventoryApp.Operations
                         : "ALL"; // Sanitize filename
                     string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                     string filename = $"InventoryLabels_Pattern_{safePattern}_{timestamp}.pdf";
+                    string fullPath = Path.Combine(Environment.CurrentDirectory, filename);
                     string title = !string.IsNullOrWhiteSpace(pattern) 
                         ? $"Inventory Labels - Pattern: {pattern}" 
                         : "Inventory Labels - All Items";
                     
-                    pdfGenerator.GenerateLabels(filteredItems, filename, title);
-                    UserInterface.ShowMessage("PDF Generated", $"Labels generated successfully as:\n{filename}");
+                    pdfGenerator.GenerateLabels(filteredItems, fullPath, title);
+                    UserInterface.ShowMessage("PDF Generated", $"Labels generated successfully as:\n{fullPath}");
                     UserInterface.UpdateStatus($"Generated labels for {filteredItems.Count} items matching pattern: {(string.IsNullOrWhiteSpace(pattern) ? "[ALL]" : pattern)}");
+                    OpenFolderContainingFile(fullPath);
                 }
                 catch (Exception ex)
                 {

@@ -12,8 +12,8 @@ namespace SimpleInventoryApp
     public class PdfLabelGenerator
     {
         // Basic label dimensions and grid layout (adjust as needed)
-        private const float LabelWidth = 2.5f; // inches
-        private const float LabelHeight = 1.5f; // inches
+        private const float LabelWidth = 2.0f; // inches
+        private const float LabelHeight = 1.0f; // inches
         private const int ColumnsPerPage = 3;
         private const int RowsPerPage = 5;
         private const float PageMargin = 0.5f; // inches
@@ -34,7 +34,7 @@ namespace SimpleInventoryApp
                     {
                         page.Margin(PageMargin, Unit.Inch);
                         page.Size(PageSizes.Letter); // Standard letter size paper
-                        page.DefaultTextStyle(x => x.FontSize(10)); // Default font size
+                        page.DefaultTextStyle(x => x.FontSize(12)); // Default font size
 
                         page.Header()
                             .AlignCenter()

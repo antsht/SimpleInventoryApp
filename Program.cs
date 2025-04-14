@@ -19,6 +19,7 @@ namespace SimpleInventoryApp
         static List<string> locations = new List<string>(); // New list for locations
         // Instantiate the PDF generator
         static readonly PdfLabelGenerator pdfGenerator = new PdfLabelGenerator();
+        static bool hasUnsavedChanges = false; // Track unsaved changes
 
         // --- Terminal.Gui Views ---
         private static MenuBar? menu;
@@ -60,7 +61,7 @@ namespace SimpleInventoryApp
                     new MenuItem ("_Add New...", "", () => AddItem(), null, null, (Key)0),
                     new MenuItem ("_Update Quantity...", "", () => UpdateItemQuantity(), null, null, (Key)0),
                     new MenuItem ("_Update Location...", "", () => UpdateItemLocation(), null, null, (Key)0),
-                    new MenuItem ("_Delete Record...", "", () => DeleteItem(), null, null, (Key)0),
+                    new MenuItem ("Delete Record...", "", () => DeleteItem(), null, null, (Key)0),
                     new MenuItem ("Find by _Name...", "", () => FindItemByName(), null, null, (Key)0),
                     new MenuItem ("Find by Inv _Num...", "", () => FindItemByInvNum(), null, null, (Key)0)
                 }),
@@ -85,18 +86,36 @@ namespace SimpleInventoryApp
                     })
                 }),
                 new MenuBarItem ("_File", new MenuItem [] {
-                    new MenuItem ("_Quit", "", () => Application.RequestStop(), null, null, Key.Q | Key.CtrlMask)
+                    new MenuItem ("_Quit", "", () => RequestQuit(), null, null, Key.Q | Key.CtrlMask)
                 })
             });
 
-            // --- Status Bar ---
+             // --- Status Bar ---
             statusLabel = new Label("Ready") { AutoSize = false, Width = Dim.Fill(), TextAlignment = TextAlignment.Left };
             statusBar = new StatusBar(new StatusItem[] {
                 // Shortcut to quit
-                new StatusItem(Key.Q | Key.CtrlMask, "~^Q~ Quit", () => Application.RequestStop()),
-                // Status Label added directly below
+                new StatusItem(Key.Q | Key.CtrlMask, "~^Q~ Quit", () => RequestQuit()),
+                // Shortcut for Save
+                new StatusItem(Key.S | Key.CtrlMask, "~^S~ Save", () => SaveData()),
+                // Shortcut for Restore
+                new StatusItem(Key.R | Key.CtrlMask, "~^R~ Restore", () => {
+                    // Use timeout wrapper as Restore shows confirmation dialog
+                    Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
+                          RestoreData();
+                          return false; // Run only once
+                     });
+                }),
+                // Shortcut for deleting selected item
+                new StatusItem(Key.D | Key.CtrlMask, "~^D~ Delete", () => {
+                    // Use timeout wrapper like in KeyPress handler to safely call DeleteItem
+                    Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
+                          DeleteItem(); // Call the overload that deletes the selected item
+                          return false; // Run only once
+                     });
+                })
+                // Status Label will be added separately below
             });
-            statusBar.Add(statusLabel); // Add the label to the status bar
+            statusBar.Add(statusLabel); // Add the label view directly to the status bar
 
             // --- Add Views to Toplevel ---
             top.Add(menu, mainWin, statusBar);
@@ -124,7 +143,12 @@ namespace SimpleInventoryApp
         {
             if (statusLabel != null)
             {
-                statusLabel.Text = message;
+                string fullMessage = message;
+                if (hasUnsavedChanges)
+                {
+                    fullMessage += " [* unsaved changes]";
+                }
+                statusLabel.Text = fullMessage;
                 Application.DoEvents(); // Ensure status update is processed
             }
         }
@@ -178,19 +202,64 @@ namespace SimpleInventoryApp
                     try {
                          // Get data directly from the DataTable to avoid issues with list ordering mismatches
                          var row = table.Rows[args.Row];
-                         ShowMessage("Item Details",
-                             $"Inv#: {row["Inv Num"]}\n" +
-                             $"ID: {row["ID"]}\n" +
-                             $"Name: {row["Name"]}\n" +
-                             $"Desc: {row["Description"]}\n" +
-                             $"Qty: {row["Qty"]}\n" +
-                             $"Loc: {row["Location"]}\n" +
-                             $"Updated: {row["Last Updated"]}");
+                         // ShowMessage("Item Details", ... ) // Removed old ShowMessage call
+
+                         // Find the actual InventoryItem object based on ID
+                         if (int.TryParse(row["ID"]?.ToString(), out int itemId)) {
+                            var itemToEdit = inventory.FirstOrDefault(item => item.Id == itemId);
+                            if (itemToEdit != null) {
+                                EditItem(itemToEdit); // Call the new EditItem method
+                            } else {
+                                 ShowMessage("Error", $"Could not find item with ID {itemId} in the main list.");
+                            }
+                         } else {
+                             ShowMessage("Error", "Could not determine Item ID from the selected row.");
+                         }
+
                      } catch (Exception ex) {
-                         ShowMessage("Error", $"Failed to get item details: {ex.Message}");
+                         ShowMessage("Error", $"Failed to get item details or initiate edit: {ex.Message}");
                      }
                  }
              };
+
+            // --- Delete Key Handling ---
+            inventoryTableView.KeyPress += (args) => {
+                if (args.KeyEvent.Key == Key.Delete || args.KeyEvent.Key == (Key.D | Key.CtrlMask))
+                {
+                    args.Handled = true; // Mark event as handled
+
+                    var table = inventoryTableView.Table;
+                    int selectedRowIndex = inventoryTableView.SelectedRow;
+
+                    if (table != null && selectedRowIndex >= 0 && selectedRowIndex < table.Rows.Count)
+                    {
+                        try
+                        {
+                             var row = table.Rows[selectedRowIndex];
+                             if (int.TryParse(row["ID"]?.ToString(), out int itemId))
+                             {
+                                 var itemToDelete = inventory.FirstOrDefault(item => item.Id == itemId);
+                                 if (itemToDelete != null) // Check if item was found
+                                 {
+                                     // Need to ensure UI updates properly after modal dialog (DeleteItem shows confirmation)
+                                     Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
+                                          DeleteItem(itemToDelete); // Call delete logic after a short delay
+                                          return false; // Run only once
+                                     });
+                                 } else {
+                                     ShowMessage("Error", $"Could not find item with ID {itemId} in the main list for deletion.");
+                                 }
+                             } else {
+                                 ShowMessage("Error", "Could not determine Item ID from the selected row for deletion.");
+                             }
+                        } catch (Exception ex) {
+                             ShowMessage("Error", $"Error processing delete key press: {ex.Message}");
+                        }
+                    } else {
+                        UpdateStatus("No item selected to delete."); // Or ShowMessage
+                    }
+                }
+            };
         }
 
         static void PopulateInventoryTable(List<InventoryItem>? items = null)
@@ -283,7 +352,8 @@ namespace SimpleInventoryApp
              };
              var sortedLocations = locations.OrderBy(l => l).ToList();
              locCombo.SetSource(sortedLocations);
-             if (sortedLocations.Any()) locCombo.SelectedItem = 0;
+             // if (sortedLocations.Any()) locCombo.SelectedItem = 0; // Don't select first item by default
+             locCombo.SelectedItem = -1; // Set to -1 for no initial selection
              inputColumn.Add(invNumText, nameText, descText, qtyText, locCombo);
 
             // Add columns to the dialog
@@ -291,6 +361,52 @@ namespace SimpleInventoryApp
 
              bool itemAdded = false;
              var okButton = new Button("OK", is_default: true);
+
+            // --- Enter Key Navigation --- 
+            void MoveFocus(View current, View next) {
+                if (current.HasFocus) {
+                    next.SetFocus();
+                }
+            }
+
+            invNumText.KeyPress += (args) => {
+                 if (args.KeyEvent.Key == Key.Enter) {
+                     args.Handled = true;
+                     nameText.SetFocus();
+                 }
+             };
+             nameText.KeyPress += (args) => {
+                 if (args.KeyEvent.Key == Key.Enter) {
+                     args.Handled = true;
+                     descText.SetFocus();
+                 }
+             };
+            descText.KeyPress += (args) => {
+                 if (args.KeyEvent.Key == Key.Enter) {
+                     args.Handled = true;
+                     qtyText.SetFocus();
+                 }
+             };
+             qtyText.KeyPress += (args) => {
+                 if (args.KeyEvent.Key == Key.Enter) {
+                      // Validate quantity before moving focus (optional but good UX)
+                      if (!int.TryParse(qtyText.Text?.ToString(), out int quantity) || quantity < 0) {
+                           MessageBox.ErrorQuery("Validation Error", "Quantity must be a non-negative number.", "Ok");
+                           qtyText.SetFocus();
+                           args.Handled = true; // Prevent moving focus if invalid
+                      } else {
+                           args.Handled = true;
+                           locCombo.SetFocus();
+                      }
+                 }
+             };
+             // Optional: Handle Enter on ComboBox to move to OK button?
+             locCombo.Enter += (args) => {
+                if (!locCombo.IsShow) {
+                    locCombo.Expand();
+                }
+             };
+
              okButton.Clicked += () => {
                  // --- Validation ---
                  if (string.IsNullOrWhiteSpace(invNumText.Text?.ToString())) {
@@ -311,21 +427,21 @@ namespace SimpleInventoryApp
                  }
 
                  // --- Add Item Logic ---
-                var newItem = new InventoryItem
-                {
-                    Id = dataStorage.GetNextId(inventory),
+            var newItem = new InventoryItem
+            {
+                Id = dataStorage.GetNextId(inventory),
                     InventoryNumber = invNumText.Text.ToString()!.Trim(),
                     Name = nameText.Text.ToString()!.Trim(),
                     Description = descText.Text?.ToString()?.Trim() ?? string.Empty,
-                    Quantity = quantity,
+                Quantity = quantity,
                     Location = sortedLocations[locCombo.SelectedItem], // Get selected location text
-                    LastUpdated = DateTime.UtcNow
-                };
+                LastUpdated = DateTime.UtcNow
+            };
 
-                inventory.Add(newItem);
+            inventory.Add(newItem);
                 try {
-                     dataStorage.SaveItems(inventory); // Save immediately
-                     // dataStorage.SaveLocations(locations); // Locations don't change here
+                     // dataStorage.SaveItems(inventory); // REMOVE Save immediately
+                     hasUnsavedChanges = true; // Set flag
                      itemAdded = true;
                      Application.RequestStop(); // Close the dialog
                 } catch (Exception ex) {
@@ -341,17 +457,163 @@ namespace SimpleInventoryApp
              dialog.AddButton(okButton);
              dialog.AddButton(cancelButton);
 
-             // Set focus to the first input field
-             dialog.Ready += () => invNumText.SetFocus();
+             // Set focus using the Loaded event handler
+             dialog.Loaded += () => {
+                 invNumText.SetFocus();
+             };
 
              Application.Run(dialog); // Run the dialog modally
 
             if (itemAdded)
             {
                  PopulateInventoryTable(); // Refresh the main table
-                 UpdateStatus($"Item added successfully.");
+                 UpdateStatus($"Item added successfully."); // UpdateStatus will add indicator if needed
             } else {
-                 UpdateStatus("Add item cancelled or failed.");
+                 UpdateStatus("Add item cancelled or failed."); // UpdateStatus will add indicator if needed
+            }
+        }
+
+        static void EditItem(InventoryItem itemToEdit)
+        {
+            if (itemToEdit == null)
+            {
+                ShowMessage("Error", "Cannot edit. Invalid item provided.");
+                return;
+            }
+            // Check if locations exist for the dropdown
+            if (!locations.Any())
+            {
+                ShowMessage("Error", "No locations defined. Cannot edit item location properly. Please add locations first.");
+                // Consider allowing editing other fields even if locations are missing?
+                // For now, prevent editing if locations are missing, as location is required.
+                return;
+            }
+
+            var dialog = new Dialog($"Edit Item (ID: {itemToEdit.Id})", 60, 18);
+
+            int labelWidth = 15;
+            int inputPadding = 1;
+            int currentY = 1;
+
+            // --- Columns ---
+            var labelColumn = new View() { X = 1, Y = 1, Width = labelWidth, Height = Dim.Fill(2) };
+            var inputColumn = new View() { X = Pos.Right(labelColumn) + inputPadding, Y = 1, Width = Dim.Fill(2), Height = Dim.Fill(2) };
+
+            // --- Labels ---
+            var invNumLabel = new Label(0, currentY, "Inv Num (*):");
+            var nameLabel = new Label(0, currentY + 2, "Name (*):");
+            var descLabel = new Label(0, currentY + 4, "Desc:");
+            var qtyLabel = new Label(0, currentY + 6, "Quantity (*):");
+            var locLabel = new Label(0, currentY + 8, "Location (*):");
+            labelColumn.Add(invNumLabel, nameLabel, descLabel, qtyLabel, locLabel);
+
+            // --- Input Fields (Populated with existing data) ---
+            var invNumText = new TextField(itemToEdit.InventoryNumber) { X = 0, Y = invNumLabel.Y, Width = Dim.Fill() };
+            var nameText = new TextField(itemToEdit.Name) { X = 0, Y = nameLabel.Y, Width = Dim.Fill() };
+            var descText = new TextField(itemToEdit.Description) { X = 0, Y = descLabel.Y, Width = Dim.Fill() };
+            var qtyText = new TextField(itemToEdit.Quantity.ToString()) { X = 0, Y = qtyLabel.Y, Width = 10 };
+            var locCombo = new ComboBox() {
+                X = 0,
+                Y = locLabel.Y,
+                Width = Dim.Fill(),
+                Height = 4,
+            };
+            var sortedLocations = locations.OrderBy(l => l).ToList();
+            locCombo.SetSource(sortedLocations);
+            // Set the initial selection in the ComboBox
+            int initialLocationIndex = sortedLocations.IndexOf(itemToEdit.Location);
+            if (initialLocationIndex >= 0) {
+                locCombo.SelectedItem = initialLocationIndex;
+            }
+            else if (sortedLocations.Any()) {
+                // If the item's location doesn't exist anymore (shouldn't happen ideally),
+                // select the first available location.
+                locCombo.SelectedItem = 0;
+                ShowMessage("Warning", "Item's original location not found. Please re-select a location.");
+            }
+            inputColumn.Add(invNumText, nameText, descText, qtyText, locCombo);
+
+            dialog.Add(labelColumn, inputColumn);
+
+            bool itemEdited = false;
+            var okButton = new Button("OK", is_default: true);
+
+            // --- Enter Key Navigation (Same as AddItem) ---
+            invNumText.KeyPress += (args) => { if (args.KeyEvent.Key == Key.Enter) { args.Handled = true; nameText.SetFocus(); } };
+            nameText.KeyPress += (args) => { if (args.KeyEvent.Key == Key.Enter) { args.Handled = true; descText.SetFocus(); } };
+            descText.KeyPress += (args) => { if (args.KeyEvent.Key == Key.Enter) { args.Handled = true; qtyText.SetFocus(); } };
+            qtyText.KeyPress += (args) => {
+                if (args.KeyEvent.Key == Key.Enter) {
+                    if (!int.TryParse(qtyText.Text?.ToString(), out int q) || q < 0) {
+                        MessageBox.ErrorQuery("Validation Error", "Quantity must be a non-negative number.", "Ok");
+                        qtyText.SetFocus(); args.Handled = true;
+                    } else {
+                        args.Handled = true; locCombo.SetFocus();
+                    }
+                }
+            };
+
+            // --- Auto expand dropdown on focus ---
+            locCombo.Enter += (args) => {
+               if (!locCombo.IsShow) {
+                   locCombo.Expand();
+               }
+            };
+
+            okButton.Clicked += () => {
+                // --- Validation ---
+                 if (string.IsNullOrWhiteSpace(invNumText.Text?.ToString())) {
+                     MessageBox.ErrorQuery("Validation Error", "Inventory Number cannot be empty.", "Ok");
+                     invNumText.SetFocus(); return;
+                 }
+                 if (string.IsNullOrWhiteSpace(nameText.Text?.ToString())) {
+                     MessageBox.ErrorQuery("Validation Error", "Name cannot be empty.", "Ok");
+                     nameText.SetFocus(); return;
+                 }
+                 if (!int.TryParse(qtyText.Text?.ToString(), out int quantity) || quantity < 0) {
+                     MessageBox.ErrorQuery("Validation Error", "Quantity must be a non-negative number.", "Ok");
+                     qtyText.SetFocus(); return;
+                 }
+                 if (locCombo.SelectedItem < 0 || locCombo.SelectedItem >= sortedLocations.Count) {
+                      MessageBox.ErrorQuery("Validation Error", "Please select a valid location.", "Ok");
+                     locCombo.SetFocus(); return;
+                 }
+
+                 // --- Update Item Logic ---
+                 try {
+                    itemToEdit.InventoryNumber = invNumText.Text.ToString()!.Trim();
+                    itemToEdit.Name = nameText.Text.ToString()!.Trim();
+                    itemToEdit.Description = descText.Text?.ToString()?.Trim() ?? string.Empty;
+                    itemToEdit.Quantity = quantity;
+                    itemToEdit.Location = sortedLocations[locCombo.SelectedItem];
+                    itemToEdit.LastUpdated = DateTime.UtcNow; // Update timestamp
+
+                     // dataStorage.SaveItems(inventory); // REMOVE Save the updated list
+                     hasUnsavedChanges = true; // Set flag
+                     itemEdited = true;
+                     Application.RequestStop(); // Close the dialog
+                } catch (Exception ex) {
+                     MessageBox.ErrorQuery("Save Error", $"Failed to save changes: {ex.Message}", "Ok");
+                }
+            };
+
+            var cancelButton = new Button("Cancel");
+            cancelButton.Clicked += () => { Application.RequestStop(); };
+
+            dialog.AddButton(okButton);
+            dialog.AddButton(cancelButton);
+
+            // Set initial focus
+            dialog.Loaded += () => { invNumText.SetFocus(); };
+
+            Application.Run(dialog);
+
+            if (itemEdited)
+            {
+                 PopulateInventoryTable(); // Refresh the main table
+                 UpdateStatus($"Item ID {itemToEdit.Id} updated successfully."); // UpdateStatus will add indicator
+            } else {
+                 UpdateStatus("Edit item cancelled or failed."); // UpdateStatus will add indicator
             }
         }
 
@@ -382,17 +644,79 @@ namespace SimpleInventoryApp
              // 6. Refresh table
         }
 
+        // New DeleteItem methods
+        static void DeleteItem(InventoryItem itemToDelete)
+        {
+            if (itemToDelete == null)
+            {
+                ShowMessage("Error", "No item selected or provided to delete.");
+                return;
+            }
+
+            bool confirmed = ConfirmAction("Confirm Deletion", $"Are you sure you want to delete item:\nInv#: {itemToDelete.InventoryNumber}\nName: {itemToDelete.Name}\nID: {itemToDelete.Id}");
+
+            if (confirmed)
+            {
+                try
+                {
+                    inventory.Remove(itemToDelete);
+                    // dataStorage.SaveItems(inventory); // REMOVE Save the changes
+                    hasUnsavedChanges = true; // Set flag
+                    PopulateInventoryTable(); // Refresh the table
+                    UpdateStatus($"Item ID {itemToDelete.Id} deleted successfully."); // UpdateStatus will add indicator
+                }
+                catch (Exception ex)
+                {
+                     MessageBox.ErrorQuery("Delete Error", $"Failed to delete item: {ex.Message}", "Ok");
+                     UpdateStatus("Item deletion failed."); // UpdateStatus will add indicator
+                }
+            }
+            else
+            {
+                UpdateStatus("Item deletion cancelled."); // UpdateStatus will add indicator
+            }
+        }
+
+        // Overload for menu item click
         static void DeleteItem()
         {
-            UpdateStatus("Delete Item: Not Implemented Yet");
-             ShowMessage("Info", "Functionality to delete item is not yet implemented.");
-            // TODO: Implement
-            // 1. Get Item ID (prompt or selection from TableView)
-            // 2. Get item details for confirmation message
-            // 3. Confirm deletion with ConfirmAction
-            // 4. Remove item from inventory list
-            // 5. Save
-            // 6. Refresh table
+            if (inventoryTableView == null || inventoryTableView.SelectedRow < 0)
+            {
+                 ShowMessage("Delete Item", "Please select an item in the table first to delete.");
+                 return;
+            }
+
+            try
+            {
+                var table = inventoryTableView.Table;
+                int selectedRowIndex = inventoryTableView.SelectedRow;
+
+                if (table != null && selectedRowIndex >= 0 && selectedRowIndex < table.Rows.Count)
+                {
+                    var row = table.Rows[selectedRowIndex];
+                    if (int.TryParse(row["ID"]?.ToString(), out int itemId))
+                    {
+                        var itemToDelete = inventory.FirstOrDefault(item => item.Id == itemId);
+                        if (itemToDelete != null)
+                        {
+                            DeleteItem(itemToDelete); // Call the main delete logic
+                        } else {
+                             ShowMessage("Error", $"Could not find item with ID {itemId} in the main list.");
+                        }
+                    }
+                    else
+                    {
+                        ShowMessage("Error", "Could not determine Item ID from the selected row.");
+                    }
+                }
+                 else {
+                      ShowMessage("Delete Item", "Invalid selection in the table.");
+                 }
+            }
+            catch (Exception ex)
+            {
+                ShowMessage("Error", $"Error initiating delete: {ex.Message}");
+            }
         }
 
          static void FindItemByName()
@@ -429,7 +753,7 @@ namespace SimpleInventoryApp
 
              dialog.AddButton(findButton);
              dialog.AddButton(cancelButton);
-             dialog.Ready += () => nameText.SetFocus();
+             dialog.Loaded += () => nameText.SetFocus();
 
              Application.Run(dialog);
 
@@ -477,7 +801,7 @@ namespace SimpleInventoryApp
 
              dialog.AddButton(findButton);
              dialog.AddButton(cancelButton);
-             dialog.Ready += () => invNumText.SetFocus();
+             dialog.Loaded += () => invNumText.SetFocus();
 
              Application.Run(dialog);
 
@@ -545,7 +869,8 @@ namespace SimpleInventoryApp
                  locations.Add(newLoc);
                  locations.Sort(); // Keep the list sorted
                 try {
-                     dataStorage.SaveLocations(locations); // Save immediately
+                     // dataStorage.SaveLocations(locations); // REMOVE Save immediately
+                     hasUnsavedChanges = true; // Set flag
                      locationAdded = true;
                      Application.RequestStop();
                 } catch (Exception ex) {
@@ -560,14 +885,14 @@ namespace SimpleInventoryApp
 
              dialog.AddButton(okButton);
              dialog.AddButton(cancelButton);
-             dialog.Ready += () => nameText.SetFocus();
+             dialog.Loaded += () => nameText.SetFocus();
 
              Application.Run(dialog);
 
              if(locationAdded) {
-                 UpdateStatus($"Location added successfully.");
+                 UpdateStatus($"Location added successfully."); // UpdateStatus will add indicator
              } else {
-                 UpdateStatus("Add location cancelled or failed.");
+                 UpdateStatus("Add location cancelled or failed."); // UpdateStatus will add indicator
              }
         }
 
@@ -589,9 +914,9 @@ namespace SimpleInventoryApp
                      csvManager.ExportToCsv(filePath);
                      ShowMessage("Export Successful", $"Inventory exported to '{Path.GetFileName(filePath)}'.");
                      UpdateStatus("Exported inventory to CSV.");
-                 }
-                 catch (Exception ex)
-                 {
+            }
+            catch (Exception ex)
+            {
                       ShowMessage("Export Error", $"Failed to export inventory: {ex.Message}");
                       UpdateStatus("CSV export failed.");
                  }
@@ -599,7 +924,7 @@ namespace SimpleInventoryApp
              else
              {
                  UpdateStatus("CSV export cancelled.");
-             }
+            }
         }
 
         static void ImportFromCsv()
@@ -618,15 +943,16 @@ namespace SimpleInventoryApp
                      // CsvManager.ImportFromCsv handles loading, merging/assigning IDs, saving items and locations
                      csvManager.ImportFromCsv(filePath);
 
-                     // Reload data from storage to reflect changes
+                     // Reload data from storage to reflect changes made by CsvManager
                      inventory = dataStorage.LoadItems();
                      locations = dataStorage.LoadLocations();
+                     hasUnsavedChanges = false; // Data on disk IS current after import
 
                      // Refresh the UI
                      PopulateInventoryTable();
 
                      ShowMessage("Import Complete", $"Import process finished from '{Path.GetFileName(filePath)}'. Check table for results.");
-                     UpdateStatus("Import process complete.");
+                     UpdateStatus("Import process complete."); // UpdateStatus handles the flag display
 
                  }
                  catch (Exception ex)
@@ -639,6 +965,52 @@ namespace SimpleInventoryApp
              {
                   UpdateStatus("CSV import cancelled.");
              }
+        }
+
+        static void SaveData()
+        {
+            try
+            {
+                UpdateStatus("Saving data...");
+                dataStorage.SaveItems(inventory);
+                dataStorage.SaveLocations(locations);
+                hasUnsavedChanges = false; // Reset flag
+                UpdateStatus("Data saved successfully.");
+                // Optional: Show a brief confirmation message?
+                // ShowMessage("Save", "Data saved successfully.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.ErrorQuery("Save Error", $"Failed to save data: {ex.Message}", "Ok");
+                UpdateStatus("Save data failed.");
+            }
+        }
+
+        static void RestoreData()
+        {
+            bool confirmed = ConfirmAction("Confirm Restore", "Reload data from disk?\nThis will discard any unsaved changes.");
+
+            if (confirmed)
+            {
+                try
+                {
+                    UpdateStatus("Restoring data from disk...");
+                    inventory = dataStorage.LoadItems();
+                    locations = dataStorage.LoadLocations();
+                    hasUnsavedChanges = false; // Reset flag
+                    PopulateInventoryTable(); // Refresh the view with reloaded data
+                    UpdateStatus("Data restored successfully from disk.");
+                }
+                catch (Exception ex)
+                {
+                     MessageBox.ErrorQuery("Restore Error", $"Failed to restore data: {ex.Message}", "Ok");
+                     UpdateStatus("Restore data failed.");
+                }
+            }
+            else
+            {
+                UpdateStatus("Restore data cancelled."); // UpdateStatus handles flag
+            }
         }
 
         // --- Report Generation ---
@@ -660,8 +1032,8 @@ namespace SimpleInventoryApp
              if (!locations.Any())
              {
                  ShowMessage("Error", "No locations defined. Cannot generate report by location.");
-                 return;
-             }
+                    return;
+                }
 
              var dialog = new Dialog("Select Location", 40, 15); // Increased height
              var listLabel = new Label("Select Location:") { X = 1, Y = 1 };
@@ -690,7 +1062,7 @@ namespace SimpleInventoryApp
              dialog.Add(listLabel, locationListView);
              dialog.AddButton(okButton);
              dialog.AddButton(cancelButton);
-             dialog.Ready += () => locationListView.SetFocus();
+             dialog.Loaded += () => locationListView.SetFocus();
 
              Application.Run(dialog);
 
@@ -752,7 +1124,7 @@ namespace SimpleInventoryApp
 
                dialog.AddButton(okButton);
                dialog.AddButton(cancelButton);
-               dialog.Ready += () => invNumText.SetFocus();
+               dialog.Loaded += () => invNumText.SetFocus();
 
                Application.Run(dialog);
 
@@ -772,6 +1144,32 @@ namespace SimpleInventoryApp
                }
          }
 
+        // --- Add this new method to the Program class ---
+        static void RequestQuit()
+        {
+            if (hasUnsavedChanges)
+            {
+                int result = MessageBox.Query("Unsaved Changes", "There are unsaved changes. Save before quitting?", "Save and Quit", "Discard and Quit", "Cancel");
+                if (result == 0) // Save and Quit
+                {
+                    SaveData();
+                    if (!hasUnsavedChanges) // Check if save was successful (flag is reset)
+                    {
+                         Application.RequestStop();
+                    }
+                    // else: Save failed, don't quit
+                }
+                else if (result == 1) // Discard and Quit
+                {
+                    Application.RequestStop();
+                }
+                // else if result == 2 (Cancel) or -1 (dialog closed), do nothing
+            }
+            else
+            {
+                Application.RequestStop(); // No unsaved changes, quit directly
+            }
+        }
 
         #region Spectre Console Methods (Commented Out)
         /*

@@ -304,9 +304,13 @@ namespace SimpleInventoryApp.Operations
 
                 // --- Add Item Logic ---
                 try {
+                    // *** Get the next ID BEFORE creating the item ***
+                    int newId = dataStorage.GetNextId(inventory);
+
                     // Create a new item with the input values
                     var newItem = new InventoryItem
                     {
+                        Id = newId, // *** Assign the new ID ***
                         InventoryNumber = invNumText.Text.ToString()!.Trim(),
                         Name = nameText.Text.ToString()!.Trim(),
                         Description = descText.Text?.ToString()?.Trim() ?? string.Empty,

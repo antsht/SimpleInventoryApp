@@ -125,12 +125,7 @@ namespace SimpleInventoryApp
             {
                 _commandManager.CreateMenuItem(_commandManager.GetCommand("List All Items") ?? throw new InvalidOperationException("Command not found")),
                 _commandManager.CreateMenuItem(_commandManager.GetCommand("Sort/Filter") ?? throw new InvalidOperationException("Command not found")),
-                _commandManager.CreateMenuItem(_commandManager.GetCommand("Add New Item") ?? throw new InvalidOperationException("Command not found")),
-                new MenuItem("_Update Quantity...", "", () => Operations.InventoryOperations.UpdateItemQuantity(), null, null, Key.Null),
-                new MenuItem("_Update Location...", "", () => Operations.InventoryOperations.UpdateItemLocation(), null, null, Key.Null),
-                _commandManager.CreateMenuItem(_commandManager.GetCommand("Delete Item") ?? throw new InvalidOperationException("Command not found")),
-                new MenuItem("Find by _Name...", "", () => Operations.InventoryOperations.FindItemByName(), null, null, Key.Null),
-                new MenuItem("Find by Inv _Num...", "", () => Operations.InventoryOperations.FindItemByInvNum(), null, null, Key.Null)
+                _commandManager.CreateMenuItem(_commandManager.GetCommand("Add New Item") ?? throw new InvalidOperationException("Command not found"))
             });
             
             var dictionaryMenu = new MenuBarItem("_Dictionary", new MenuItem[]
@@ -179,6 +174,11 @@ namespace SimpleInventoryApp
             var statusBar = new StatusBar(new StatusItem[]
             {
                 new StatusItem(Key.F1, "~F1~ Help", () => UserInterface.ShowHelpDialog()),
+                new StatusItem(
+                    (_commandManager.GetCommand("Add New Item") as AddItemCommand)?.KeyBinding ?? Key.F2,
+                    "~F2~ Add",
+                    () => _commandManager.ExecuteCommand("Add New Item")
+                ),
                 new StatusItem(Key.F3, "~F3~ Sort/Filter", () => Operations.InventoryOperations.ShowSortFilterDialog()),
                 new StatusItem(
                     (_commandManager.GetCommand("Save Data") as SaveDataCommand)?.KeyBinding ?? Key.F5,

@@ -29,7 +29,7 @@ namespace SimpleInventoryApp.Commands
         /// <summary>
         /// Gets the key binding for the command
         /// </summary>
-        public Key? KeyBinding => null;
+        public Key? KeyBinding => Key.F2;
         
         /// <summary>
         /// Checks if the command can be executed

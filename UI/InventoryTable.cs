@@ -41,13 +41,13 @@ namespace SimpleInventoryApp.UI
 
             // Define table structure
             var dataTable = new DataTable();
+            dataTable.Columns.Add("Location", typeof(string));
             dataTable.Columns.Add("Inv Num", typeof(string));
-            dataTable.Columns.Add("ID", typeof(int));
             dataTable.Columns.Add("Name", typeof(string));
             dataTable.Columns.Add("Description", typeof(string));
             dataTable.Columns.Add("Qty", typeof(int));
-            dataTable.Columns.Add("Location", typeof(string));
             dataTable.Columns.Add("Last Updated", typeof(string)); 
+            dataTable.Columns.Add("ID", typeof(int));
             inventoryTableView.Table = dataTable;
 
             // --- Configure TableStyle --- 
@@ -149,13 +149,13 @@ namespace SimpleInventoryApp.UI
             foreach (var item in displayItems)
             {
                 var row = dataTable.NewRow();
+                row["Location"] = item.Location;
                 row["Inv Num"] = item.InventoryNumber;
-                row["ID"] = item.Id;
                 row["Name"] = item.Name;
                 row["Description"] = item.Description; 
                 row["Qty"] = item.Quantity;
-                row["Location"] = item.Location;
                 row["Last Updated"] = item.LastUpdated.ToLocalTime().ToString("g"); // Format as short date and time
+                row["ID"] = item.Id;
                 dataTable.Rows.Add(row);
             }
 

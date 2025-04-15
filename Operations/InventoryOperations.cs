@@ -115,22 +115,23 @@ namespace SimpleInventoryApp.Operations
         // --- New Method to Apply Current Sort/Filter --- 
         public static List<InventoryItem> ApplySortAndFilter()
         {
+            string filterText = string.IsNullOrWhiteSpace(currentFilterText) ? "" : currentFilterText.ToLower();
+            string sortColumn = string.IsNullOrWhiteSpace(currentSortColumn) ? "Location" : currentSortColumn;
             IEnumerable<InventoryItem> query = inventory;
 
             // Apply Filter
-            if (!string.IsNullOrWhiteSpace(currentFilterText))
+            if (!string.IsNullOrWhiteSpace(filterText))
             {
-                string filterLower = currentFilterText.ToLowerInvariant();
                 query = query.Where(item => 
-                    (item.Name?.ToLowerInvariant().Contains(filterLower) ?? false) ||
-                    (item.InventoryNumber?.ToLowerInvariant().Contains(filterLower) ?? false) ||
-                    (item.Description?.ToLowerInvariant().Contains(filterLower) ?? false) ||
-                    (item.Location?.ToLowerInvariant().Contains(filterLower) ?? false)
+                    (item.Name?.ToLowerInvariant().Contains(filterText) ?? false) ||
+                    (item.InventoryNumber?.ToLowerInvariant().Contains(filterText) ?? false) ||
+                    (item.Description?.ToLowerInvariant().Contains(filterText) ?? false) ||
+                    (item.Location?.ToLowerInvariant().Contains(filterText) ?? false)
                 );
             }
 
             // Apply Sorting
-            switch (currentSortColumn)
+            switch (sortColumn)
             {
                 case "Inv Num":
                     query = sortAscending ? query.OrderBy(i => i.InventoryNumber) : query.OrderByDescending(i => i.InventoryNumber);

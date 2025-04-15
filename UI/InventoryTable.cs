@@ -26,15 +26,20 @@ namespace SimpleInventoryApp.UI
 
             inventoryTableView = new TableView()
             {
-                X = 0,
+                X = 1,
                 Y = 0,
-                Width = Dim.Fill(1), // Leave space for scrollbar/right border
-                Height = Dim.Fill(1), // Fill the FrameView, but leave 1 line for its border
+                Width = Dim.Fill(1), // Keep space for scrollbar/right border
+                Height = Dim.Fill(), // Fill parent's client area
                 FullRowSelect = true, // Select the whole row
-                
+                // Ensure the TableView's own border is defined
+                Border = new Border()
+                {
+                    BorderStyle = BorderStyle.Rounded,
+                    BorderBrush = Color.Gray
+                }
             };
 
-            // Define columns matching InventoryItem properties
+            // Define table structure
             var dataTable = new DataTable();
             dataTable.Columns.Add("Inv Num", typeof(string));
             dataTable.Columns.Add("ID", typeof(int));
@@ -42,8 +47,19 @@ namespace SimpleInventoryApp.UI
             dataTable.Columns.Add("Description", typeof(string));
             dataTable.Columns.Add("Qty", typeof(int));
             dataTable.Columns.Add("Location", typeof(string));
-            dataTable.Columns.Add("Last Updated", typeof(string)); // Keep as string for display
-            inventoryTableView.Table = dataTable; // Assign the empty table structure initially
+            dataTable.Columns.Add("Last Updated", typeof(string)); 
+            inventoryTableView.Table = dataTable;
+
+            // --- Configure TableStyle --- 
+            var tableStyle = new TableView.TableStyle
+            {
+                 ShowHorizontalHeaderOverline = true, 
+                 ShowVerticalCellLines = true, 
+                 ExpandLastColumn = true, 
+                 SmoothHorizontalScrolling = true,
+            };
+            inventoryTableView.Style = tableStyle;
+            // ---------------------------
 
             // Event handling for cell activation (double-click)
             inventoryTableView.CellActivated += (args) => {

@@ -53,11 +53,21 @@ namespace SimpleInventoryApp.Operations
                 try
                 {
                     UserInterface.UpdateStatus("Restoring data from disk...");
-                    inventory = dataStorage.LoadItems() ?? new List<InventoryItem>();
-                    locations = dataStorage.LoadLocations() ?? new List<string>();
+                    
+                    // Load into temporary lists first
+                    var loadedItems = dataStorage.LoadItems() ?? new List<InventoryItem>(); 
+                    var loadedLocations = dataStorage.LoadLocations() ?? new List<string>(); 
+                    
+                    // Clear the *existing* shared lists
+                    inventory.Clear();
+                    locations.Clear();
+                    
+                    // Add the loaded data into the shared lists
+                    inventory.AddRange(loadedItems);
+                    locations.AddRange(loadedLocations);
                     
                     UserInterface.SetHasUnsavedChanges(false); // Reset flag
-                    InventoryTable.Initialize(inventory); // Update the inventory table reference
+                    InventoryTable.Initialize(inventory); // Ensure table references the (now updated) shared list
                     InventoryTable.PopulateInventoryTable(InventoryOperations.ApplySortAndFilter()); // Refresh view with restored data + sort/filter
                     UserInterface.UpdateStatus("Data restored successfully from disk.");
                 }

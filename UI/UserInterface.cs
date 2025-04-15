@@ -93,6 +93,7 @@ namespace SimpleInventoryApp.UI
                 "  F3  - Sort / Filter Inventory\n" +
                 "  F5  - Save Data\n" +
                 "  F6  - Restore Data\n" +
+                "  F7  - Cycle Theme\n" +
                 "  F8  - Delete Selected Item (Use Delete Key in Table)\n" +
                 "  F10 - Quit Application\n" +
                 "\n" +

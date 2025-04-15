@@ -78,5 +78,45 @@ namespace SimpleInventoryApp.UI
                 Application.RequestStop(); // No unsaved changes, quit directly
             }
         }
+
+        // --- New Method for Help Dialog ---
+        public static void ShowHelpDialog()
+        {
+            var dialog = new Dialog("Help - Simple Inventory App", 60, 20); // Adjust size as needed
+
+            string programName = "Simple Inventory App";
+            string description = "A basic console application for managing inventory items and locations.";
+            string hotkeys = 
+                "Hotkeys:\n" +
+                "------------------------------\n" +
+                "  F1  - Show this Help\n" +
+                "  F3  - Sort / Filter Inventory\n" +
+                "  F5  - Save Data\n" +
+                "  F6  - Restore Data\n" +
+                "  F8  - Delete Selected Item (Use Delete Key in Table)\n" +
+                "  F10 - Quit Application\n" +
+                "\n" +
+                "Table Navigation:\n" +
+                "  Arrows - Move Selection\n" +
+                "  Enter / Double Click - Edit Item\n" +
+                "  Delete Key - Delete Selected Item";
+
+            var infoLabel = new TextView() { // Use TextView for multi-line
+                X = 1, Y = 1,
+                Width = Dim.Fill(2),
+                Height = Dim.Fill(4),
+                ReadOnly = true,
+                Text = $"{programName}\n\n{description}\n\n{hotkeys}"
+            };
+            
+            var closeButton = new Button("Close");
+            closeButton.Clicked += () => { Application.RequestStop(); };
+
+            dialog.Add(infoLabel);
+            dialog.AddButton(closeButton);
+
+            closeButton.SetFocus(); // Explicitly set focus to the button
+            Application.Run(dialog);
+        }
     }
 } 

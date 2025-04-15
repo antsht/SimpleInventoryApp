@@ -146,5 +146,40 @@ namespace SimpleInventoryApp.UI
             // Refresh the table view
             inventoryTableView.SetNeedsDisplay();
         }
+
+        // --- New method to get the selected item --- 
+        public static InventoryItem? GetSelectedItem()
+        {
+            if (inventoryTableView == null || inventoryTableView.Table == null || inventoryTableView.SelectedRow < 0)
+            {
+                return null; // No table or no selection
+            }
+
+            int selectedRowIndex = inventoryTableView.SelectedRow;
+            if (selectedRowIndex >= inventoryTableView.Table.Rows.Count)
+            {
+                 return null; // Selection out of bounds (e.g., after delete/filter)
+            }
+            
+            try
+            {
+                var table = inventoryTableView.Table;
+                var row = table.Rows[selectedRowIndex];
+                if (int.TryParse(row["ID"]?.ToString(), out int itemId))
+                {
+                    // Find the item in the main inventory list by ID
+                    return inventory.FirstOrDefault(item => item.Id == itemId);
+                }
+            }
+            catch (Exception ex) // Index errors, etc.
+            {
+                // Log error? For now, just return null
+                Console.Error.WriteLine($"Error getting selected item: {ex.Message}"); 
+                return null;
+            }
+
+            return null; // ID parsing failed or other issue
+        }
+        // ----------------------------------------
     }
 } 

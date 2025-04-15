@@ -90,34 +90,35 @@ namespace SimpleInventoryApp
             // Status Bar
             statusLabel = new Label("Ready") { AutoSize = false, Width = Dim.Fill(), TextAlignment = TextAlignment.Left };
             statusBar = new StatusBar(new StatusItem[] {
-                // Shortcut to quit
-                new StatusItem(Key.Q | Key.CtrlMask, "~^Q~ Quit", () => UserInterface.RequestQuit()),
-                // Shortcut for Save
-                new StatusItem(Key.S | Key.CtrlMask, "~^S~ Save", () => DataOperations.SaveData()),
-                // Shortcut for Restore
-                new StatusItem(Key.R | Key.CtrlMask, "~^R~ Restore", () => {
+                // NEW ORDER:
+                // Help: F1
+                new StatusItem(Key.F1, "~F1~ Help", () => UserInterface.ShowHelpDialog()),
+                // Sort/Filter: F3 (was F5)
+                new StatusItem(Key.F3, "~F3~ Sort/Filter", () => InventoryOperations.ShowSortFilterDialog()),
+                // Save: F5 (was ^S)
+                new StatusItem(Key.F5, "~F5~ Save", () => DataOperations.SaveData()),
+                // Restore: F6 (was ^R)
+                new StatusItem(Key.F6, "~F6~ Restore", () => {
                     Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
                           DataOperations.RestoreData();
-                          return false; 
+                          return false;
                      });
                 }),
-                // Shortcut for deleting selected item (NOTE: Currently non-functional from status bar)
-                new StatusItem(Key.D | Key.CtrlMask, "~^D~ Delete", () => {
-                    // Deleting via status bar shortcut is tricky as we don't have direct access 
-                    // to the selected item here. The Delete key press is handled in InventoryTable.cs.
-                    UserInterface.ShowMessage("Delete Shortcut", "Use the Delete key on the selected item in the table.");
-                    // Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
-                          // var selectedItem = InventoryOperations.GetSelectedItem(); // Incorrect
-                          // if (selectedItem != null) {
-                          //    InventoryOperations.DeleteItem(selectedItem);
-                          // } else {
-                          //    UserInterface.ShowMessage("Delete", "No item selected.");
-                          // }
-                          // return false; 
-                     // });
-                }),
-                // Shortcut for Sort/Filter
-                new StatusItem(Key.F5, "~F5~ Sort/Filter", () => InventoryOperations.ShowSortFilterDialog())
+                // Delete: F8 (was ^D) (NOTE: Still non-functional from status bar)
+                new StatusItem(Key.F8, "~F8~ Delete", () => {
+                    // Check if there's a selected item in the inventory table
+                    if (InventoryTable.GetSelectedItem() != null) {
+                        // Get the selected item and delete it
+                        var selectedItem = InventoryTable.GetSelectedItem();
+                        InventoryOperations.DeleteItem(selectedItem!);
+                    } else {
+                        // Show message if no item is selected
+                        UserInterface.ShowMessage("No Selection", "Please select an item in the table first.");
+                        return;
+                    }
+                       }),
+                // Quit: F10 (was ^Q)
+                new StatusItem(Key.F10, "~F10~ Quit", () => UserInterface.RequestQuit())
             });
             statusBar.Add(statusLabel); // Add the label view directly to the status bar
 
@@ -136,13 +137,15 @@ namespace SimpleInventoryApp
             // Setup the Inventory Table with a reference to the same inventory collection
             InventoryTable.Initialize(inventory);
             inventoryTableView = InventoryTable.SetupInventoryTableView(
-                editItemAction: (item) => {
+                editItemAction: (item) =>
+                {
                     // Call InventoryOperations.EditItem with the item to edit
                     InventoryOperations.EditItem(item);
                     // Re-initialize InventoryTable to ensure it has updated references
                     InventoryTable.Initialize(inventory);
-                }, 
-                deleteItemAction: (item) => {
+                },
+                deleteItemAction: (item) =>
+                {
                     // Call InventoryOperations.DeleteItem with the item to delete  
                     InventoryOperations.DeleteItem(item);
                     // Re-initialize InventoryTable to ensure it has updated references
@@ -167,4 +170,4 @@ namespace SimpleInventoryApp
             DataOperations.SaveData();
         }
     }
-} 
+}

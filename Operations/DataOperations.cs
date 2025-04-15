@@ -95,12 +95,10 @@ namespace SimpleInventoryApp.Operations
             
             dialog.Add(pathLabel, pathText, helpLabel);
             
-            // Add buttons
-            var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
-            
-            var exportButton = new Button("Export") { X = Pos.Center() - 10 };
+            // Add buttons using dialog's built-in functionality
+            var exportButton = new Button("Export");
             exportButton.Clicked += () => {
-                string path = pathText.Text.ToString();
+                string path = pathText.Text?.ToString() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(path))
                 {
                     UserInterface.ShowMessage("Invalid Path", "Please enter a valid export path.");
@@ -122,13 +120,14 @@ namespace SimpleInventoryApp.Operations
                 }
             };
             
-            var cancelButton = new Button("Cancel") { X = Pos.Center() + 2 };
+            var cancelButton = new Button("Cancel");
             cancelButton.Clicked += () => { Application.RequestStop(); };
             
-            btnContainer.Add(exportButton, cancelButton);
-            dialog.Add(btnContainer);
+            dialog.AddButton(cancelButton);
+            dialog.AddButton(exportButton);
             
             // Set focus to the path field
+            dialog.FocusFirst();
             pathText.SetFocus();
             
             // Run the dialog
@@ -157,10 +156,8 @@ namespace SimpleInventoryApp.Operations
             
             dialog.Add(pathLabel, pathText, helpLabel);
             
-            // Add buttons
-            var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
-            
-            var importButton = new Button("Import") { X = Pos.Center() - 10 };
+            // Add buttons using dialog's built-in functionality
+            var importButton = new Button("Import");
             importButton.Clicked += () => {
                 string filePath = pathText.Text?.ToString() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
@@ -177,31 +174,35 @@ namespace SimpleInventoryApp.Operations
                     try
                     {
                         csvManager.ImportFromCsv(filePath);
+
                         inventory = dataStorage.LoadItems() ?? new List<InventoryItem>();
                         locations = dataStorage.LoadLocations() ?? new List<string>();
 
-                        UserInterface.SetHasUnsavedChanges(false); // Data on disk IS current after import
-                        InventoryTable.Initialize(inventory); // Update the inventory table reference
-                        InventoryTable.PopulateInventoryTable(InventoryOperations.ApplySortAndFilter()); // Refresh view with imported data + sort/filter
+                        UserInterface.SetHasUnsavedChanges(true); // FIX: Import SHOULD mark changes as unsaved
+                        InventoryTable.Initialize(inventory);
+                        InventoryTable.PopulateInventoryTable(InventoryOperations.ApplySortAndFilter());
                         
+                        Application.RequestStop(); // Close dialog after successful import attempt
                         UserInterface.ShowMessage("Import Complete", $"Import process finished from '{Path.GetFileName(filePath)}'. Check table for results.");
                         UserInterface.UpdateStatus("Import process complete.");
                     }
                     catch (Exception ex)
                     {
+                        Application.RequestStop(); // Close dialog even on error
                         UserInterface.ShowMessage("Import Error", $"Failed to import: {ex.Message}");
                         UserInterface.UpdateStatus("Import from CSV failed.");
                     }
                 }
             };
             
-            var cancelButton = new Button("Cancel") { X = Pos.Center() + 2 };
+            var cancelButton = new Button("Cancel");
             cancelButton.Clicked += () => { Application.RequestStop(); };
             
-            btnContainer.Add(importButton, cancelButton);
-            dialog.Add(btnContainer);
+            dialog.AddButton(cancelButton);
+            dialog.AddButton(importButton);
             
             // Set focus to the path field
+            dialog.FocusFirst();
             pathText.SetFocus();
             
             // Run the dialog

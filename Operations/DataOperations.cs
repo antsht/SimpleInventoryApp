@@ -67,8 +67,19 @@ namespace SimpleInventoryApp.Operations
                     locations.AddRange(loadedLocations);
                     
                     UserInterface.SetHasUnsavedChanges(false); // Reset flag
+                    
+                    // Force a complete UI refresh
                     InventoryTable.Initialize(inventory); // Ensure table references the (now updated) shared list
-                    InventoryTable.PopulateInventoryTable(InventoryOperations.ApplySortAndFilter()); // Refresh view with restored data + sort/filter
+                    
+                    // Apply any active sort/filter
+                    var displayItems = InventoryOperations.ApplySortAndFilter();
+                    
+                    // Force refresh of the table with the filtered data
+                    InventoryTable.PopulateInventoryTable(displayItems);
+                    
+                    // Force a refresh of the UI
+                    Terminal.Gui.Application.Refresh();
+                    
                     UserInterface.UpdateStatus("Data restored successfully from disk.");
                 }
                 catch (Exception ex)
@@ -119,7 +130,7 @@ namespace SimpleInventoryApp.Operations
                 {
                     // Export the data
                     csvManager.ExportToCsv(path);
-                    Application.RequestStop(); // Close the dialog
+                    Terminal.Gui.Application.RequestStop(); // Close the dialog
                     UserInterface.ShowMessage("Export Complete", $"Export successful to: {path}");
                     UserInterface.UpdateStatus($"Data exported to CSV: {Path.GetFileName(path)}");
                 }
@@ -131,7 +142,7 @@ namespace SimpleInventoryApp.Operations
             };
             
             var cancelButton = new Button("Cancel");
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             dialog.AddButton(cancelButton);
             dialog.AddButton(exportButton);
@@ -141,7 +152,7 @@ namespace SimpleInventoryApp.Operations
             pathText.SetFocus();
             
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
         
         public static void ImportFromCsv()
@@ -192,13 +203,13 @@ namespace SimpleInventoryApp.Operations
                         InventoryTable.Initialize(inventory);
                         InventoryTable.PopulateInventoryTable(InventoryOperations.ApplySortAndFilter());
                         
-                        Application.RequestStop(); // Close dialog after successful import attempt
+                        Terminal.Gui.Application.RequestStop(); // Close dialog after successful import attempt
                         UserInterface.ShowMessage("Import Complete", $"Import process finished from '{Path.GetFileName(filePath)}'. Check table for results.");
                         UserInterface.UpdateStatus("Import process complete.");
                     }
                     catch (Exception ex)
                     {
-                        Application.RequestStop(); // Close dialog even on error
+                        Terminal.Gui.Application.RequestStop(); // Close dialog even on error
                         UserInterface.ShowMessage("Import Error", $"Failed to import: {ex.Message}");
                         UserInterface.UpdateStatus("Import from CSV failed.");
                     }
@@ -206,7 +217,7 @@ namespace SimpleInventoryApp.Operations
             };
             
             var cancelButton = new Button("Cancel");
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             dialog.AddButton(cancelButton);
             dialog.AddButton(importButton);
@@ -216,7 +227,7 @@ namespace SimpleInventoryApp.Operations
             pathText.SetFocus();
             
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
     }
 } 

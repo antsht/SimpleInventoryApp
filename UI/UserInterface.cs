@@ -1,6 +1,7 @@
 using System;
 using Terminal.Gui;
 using NStack;
+using SimpleInventoryApp.Services;
 
 namespace SimpleInventoryApp.UI
 {
@@ -34,7 +35,7 @@ namespace SimpleInventoryApp.UI
                     fullMessage += " [* unsaved changes]";
                 }
                 statusLabel.Text = fullMessage;
-                Application.DoEvents(); // Ensure status update is processed
+                Terminal.Gui.Application.Refresh();
             }
         }
 
@@ -58,24 +59,23 @@ namespace SimpleInventoryApp.UI
                 int result = MessageBox.Query("Unsaved Changes", "There are unsaved changes. Save before quitting?", "Save and Quit", "Discard and Quit", "Cancel");
                 if (result == 0) // Save and Quit
                 {
-                    // We need to call SaveData but it's in Program.cs now
-                    // We'll have to refactor this later
-                    Program.SaveData();
+                    // Now use the ApplicationService to save data
+                    ApplicationService.Instance.SaveAllData();
                     if (!hasUnsavedChanges) // Check if save was successful (flag is reset)
                     {
-                        Application.RequestStop();
+                        Terminal.Gui.Application.RequestStop();
                     }
                     // else: Save failed, don't quit
                 }
                 else if (result == 1) // Discard and Quit
                 {
-                    Application.RequestStop();
+                    Terminal.Gui.Application.RequestStop();
                 }
                 // else if result == 2 (Cancel) or -1 (dialog closed), do nothing
             }
             else
             {
-                Application.RequestStop(); // No unsaved changes, quit directly
+                Terminal.Gui.Application.RequestStop(); // No unsaved changes, quit directly
             }
         }
 
@@ -111,13 +111,13 @@ namespace SimpleInventoryApp.UI
             };
             
             var closeButton = new Button("Close");
-            closeButton.Clicked += () => { Application.RequestStop(); };
+            closeButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
 
             dialog.Add(infoLabel);
             dialog.AddButton(closeButton);
 
             closeButton.SetFocus(); // Explicitly set focus to the button
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
     }
 } 

@@ -117,7 +117,7 @@ namespace SimpleInventoryApp.Operations
                     string selectedLocation = sortedLocations[locCombo.SelectedItem];
                     
                     // Close dialog
-                    Application.RequestStop();
+                    Terminal.Gui.Application.RequestStop();
                     
                     try
                     {
@@ -156,7 +156,7 @@ namespace SimpleInventoryApp.Operations
             };
             
             var cancelButton = new Button("Cancel");
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             dialog.AddButton(cancelButton);
             dialog.AddButton(generateButton);
@@ -166,7 +166,7 @@ namespace SimpleInventoryApp.Operations
             locCombo.SetFocus();
 
             // Run dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
         
         public static void GenerateLabelsByInventoryNumber()
@@ -187,7 +187,7 @@ namespace SimpleInventoryApp.Operations
                 string pattern = txtPattern.Text.ToString()?.Trim() ?? string.Empty;
                 
                 // Close dialog
-                Application.RequestStop();
+                Terminal.Gui.Application.RequestStop();
                 
                 try
                 {
@@ -236,7 +236,7 @@ namespace SimpleInventoryApp.Operations
             };
             
             var cancelButton = new Button("Cancel");
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             dialog.AddButton(cancelButton);
             dialog.AddButton(generateButton);
@@ -246,7 +246,7 @@ namespace SimpleInventoryApp.Operations
             txtPattern.SetFocus();
 
             // Run dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
     }
 } 

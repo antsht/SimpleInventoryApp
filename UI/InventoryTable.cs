@@ -100,7 +100,7 @@ namespace SimpleInventoryApp.UI
                                 if (itemToDelete != null) // Check if item was found
                                 {
                                     // Need to ensure UI updates properly after modal dialog
-                                    Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
+                                    Terminal.Gui.Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
                                         deleteItemAction(itemToDelete); // Call delete logic after a short delay
                                         return false; // Run only once
                                     });

@@ -41,13 +41,13 @@ namespace SimpleInventoryApp.Operations
             var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
             
             var closeButton = new Button("Close") { X = Pos.Center() };
-            closeButton.Clicked += () => { Application.RequestStop(); };
+            closeButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             btnContainer.Add(closeButton);
             
             dialog.Add(btnContainer);
             
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
             
             UserInterface.UpdateStatus($"Displayed {locations.Count} location(s).");
         }
@@ -92,14 +92,14 @@ namespace SimpleInventoryApp.Operations
                     
                     UserInterface.SetHasUnsavedChanges(true);
                     locationAdded = true;
-                    Application.RequestStop();
+                    Terminal.Gui.Application.RequestStop();
                 } catch (Exception ex) {
                     UserInterface.ShowMessage("Add Error", $"Failed to add location: {ex.Message}");
                 }
             };
             
             var cancelButton = new Button("Cancel") { X = Pos.Center() + 2 };
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             btnContainer.Add(okButton, cancelButton);
             dialog.Add(btnContainer);
@@ -108,7 +108,7 @@ namespace SimpleInventoryApp.Operations
             nameText.SetFocus();
             
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
             
             if(locationAdded) {
                 UserInterface.UpdateStatus($"Location added successfully.");

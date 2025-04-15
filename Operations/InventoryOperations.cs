@@ -83,7 +83,7 @@ namespace SimpleInventoryApp.Operations
                 
                 InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Apply and refresh
                 UserInterface.UpdateStatus("Sort/Filter applied.");
-                Application.RequestStop();
+                Terminal.Gui.Application.RequestStop();
             };
 
             // Clear Filter Button
@@ -99,7 +99,7 @@ namespace SimpleInventoryApp.Operations
 
             // Cancel Button
             var cancelBtn = new Button("Cancel");
-            cancelBtn.Clicked += () => { Application.RequestStop(); };
+            cancelBtn.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
 
             dialog.Add(sortColLabel, sortColCombo, sortDirLabel, sortDirRadio, filterLabel, filterText, filterHelp);
             dialog.AddButton(cancelBtn);
@@ -109,7 +109,7 @@ namespace SimpleInventoryApp.Operations
             dialog.FocusFirst();
             sortColCombo.SetFocus(); // Change focus to Sort By combo box initially
             // filterText.SetFocus(); // OLD: Start with filter text field focused
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
 
         // --- New Method to Apply Current Sort/Filter --- 
@@ -319,14 +319,14 @@ namespace SimpleInventoryApp.Operations
                     inventory.Add(newItem);
                     UserInterface.SetHasUnsavedChanges(true);
                     itemAdded = true;
-                    Application.RequestStop(); // Close the dialog
+                    Terminal.Gui.Application.RequestStop(); // Close the dialog
                 } catch (Exception ex) {
                     UserInterface.ShowMessage("Add Error", $"Failed to add item: {ex.Message}");
                 }
             };
             
             var cancelBtn = new Button("Cancel");
-            cancelBtn.Clicked += () => { Application.RequestStop(); };
+            cancelBtn.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             // Add the buttons to dialog's default button container
             dialog.AddButton(cancelBtn);
@@ -337,7 +337,7 @@ namespace SimpleInventoryApp.Operations
             invNumText.SetFocus();
 
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
 
             if (itemAdded)
             {
@@ -536,14 +536,14 @@ namespace SimpleInventoryApp.Operations
                         itemEdited = false;
                     }
 
-                    Application.RequestStop(); // Close the dialog
+                    Terminal.Gui.Application.RequestStop(); // Close the dialog
                 } catch (Exception ex) {
                     UserInterface.ShowMessage("Edit Error", $"Failed to update item: {ex.Message}");
                 }
             };
             
             var cancelBtn = new Button("Cancel");
-            cancelBtn.Clicked += () => { Application.RequestStop(); };
+            cancelBtn.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
 
             // Add the buttons to dialog's default button container
             dialog.AddButton(cancelBtn);
@@ -554,7 +554,7 @@ namespace SimpleInventoryApp.Operations
             invNumText.SetFocus();
 
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
 
             if (itemEdited)
             {
@@ -612,10 +612,10 @@ namespace SimpleInventoryApp.Operations
                     var itemToDelete = inventory.FirstOrDefault(i => i.Id == id);
                     if (itemToDelete != null)
                     {
-                        Application.RequestStop(); // Close this dialog
+                        Terminal.Gui.Application.RequestStop(); // Close this dialog
                         
                         // Call DeleteItem with the found item after a short delay
-                        Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
+                        Terminal.Gui.Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) => {
                             DeleteItem(itemToDelete);
                             return false; // Run only once
                         });
@@ -632,7 +632,7 @@ namespace SimpleInventoryApp.Operations
             };
             
             var cancelButton = new Button("Cancel") { X = Pos.Center() + 2 };
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             btnContainer.Add(deleteButton, cancelButton);
             dialog.Add(btnContainer);
@@ -641,7 +641,7 @@ namespace SimpleInventoryApp.Operations
             idText.SetFocus();
             
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
 
         public static void UpdateItemQuantity()
@@ -674,7 +674,7 @@ namespace SimpleInventoryApp.Operations
                 if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     // Close dialog before showing results
-                    Application.RequestStop();
+                    Terminal.Gui.Application.RequestStop();
                     
                     // Use case-insensitive regex for partial matching
                     var regex = new Regex(Regex.Escape(searchText), RegexOptions.IgnoreCase);
@@ -698,7 +698,7 @@ namespace SimpleInventoryApp.Operations
             };
             
             var cancelButton = new Button("Cancel") { X = Pos.Center() + 2 };
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             btnContainer.Add(findButton, cancelButton);
             dialog.Add(btnContainer);
@@ -707,7 +707,7 @@ namespace SimpleInventoryApp.Operations
             nameText.SetFocus();
             
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
 
         public static void FindItemByInvNum()
@@ -728,7 +728,7 @@ namespace SimpleInventoryApp.Operations
                 if (!string.IsNullOrWhiteSpace(searchText))
                 {
                     // Close dialog before showing results
-                    Application.RequestStop();
+                    Terminal.Gui.Application.RequestStop();
                     
                     // Use case-insensitive regex for partial matching
                     var regex = new Regex(Regex.Escape(searchText), RegexOptions.IgnoreCase);
@@ -752,7 +752,7 @@ namespace SimpleInventoryApp.Operations
             };
             
             var cancelButton = new Button("Cancel") { X = Pos.Center() + 2 };
-            cancelButton.Clicked += () => { Application.RequestStop(); };
+            cancelButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
             
             btnContainer.Add(findButton, cancelButton);
             dialog.Add(btnContainer);
@@ -761,7 +761,7 @@ namespace SimpleInventoryApp.Operations
             invNumText.SetFocus();
             
             // Run the dialog
-            Application.Run(dialog);
+            Terminal.Gui.Application.Run(dialog);
         }
     }
 } 

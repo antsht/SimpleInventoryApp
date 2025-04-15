@@ -125,7 +125,8 @@ namespace SimpleInventoryApp
             {
                 _commandManager.CreateMenuItem(_commandManager.GetCommand("List All Items") ?? throw new InvalidOperationException("Command not found")),
                 _commandManager.CreateMenuItem(_commandManager.GetCommand("Sort/Filter") ?? throw new InvalidOperationException("Command not found")),
-                _commandManager.CreateMenuItem(_commandManager.GetCommand("Add New Item") ?? throw new InvalidOperationException("Command not found"))
+                _commandManager.CreateMenuItem(_commandManager.GetCommand("Add New Item") ?? throw new InvalidOperationException("Command not found")),
+                _commandManager.CreateMenuItem(_commandManager.GetCommand("Copy Item") ?? throw new InvalidOperationException("Command not found"))
             });
             
             var dictionaryMenu = new MenuBarItem("_Dictionary", new MenuItem[]
@@ -180,6 +181,11 @@ namespace SimpleInventoryApp
                     () => _commandManager.ExecuteCommand("Add New Item")
                 ),
                 new StatusItem(Key.F3, "~F3~ Sort/Filter", () => Operations.InventoryOperations.ShowSortFilterDialog()),
+                new StatusItem(
+                    (_commandManager.GetCommand("Copy Item") as CopyItemCommand)?.KeyBinding ?? Key.F4,
+                    "~F4~ Copy",
+                    () => _commandManager.ExecuteCommand("Copy Item")
+                ),
                 new StatusItem(
                     (_commandManager.GetCommand("Save Data") as SaveDataCommand)?.KeyBinding ?? Key.F5,
                     "~F5~ Save",
@@ -256,6 +262,7 @@ namespace SimpleInventoryApp
             _commandManager.RegisterCommand(new ListAllItemsCommand(_appService));
             _commandManager.RegisterCommand(new SortFilterCommand(_appService));
             _commandManager.RegisterCommand(new DeleteItemCommand(_appService));
+            _commandManager.RegisterCommand(new CopyItemCommand(_appService));
         }
         
         /// <summary>

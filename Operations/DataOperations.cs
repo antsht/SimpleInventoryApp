@@ -30,17 +30,36 @@ namespace SimpleInventoryApp.Operations
             try
             {
                 UserInterface.UpdateStatus("Saving data...");
-                dataStorage.SaveItems(inventory);
-                dataStorage.SaveLocations(locations);
+                Console.WriteLine("DataOperations.SaveData: Saving through ApplicationService...");
+                
+                // First, update the shared collections in case they changed
+                SimpleInventoryApp.Services.ApplicationService.Instance.InventoryService.GetInventory().Clear();
+                foreach (var item in inventory)
+                {
+                    SimpleInventoryApp.Services.ApplicationService.Instance.InventoryService.GetInventory().Add(item);
+                }
+                
+                // Also sync locations to the LocationService
+                var locationService = SimpleInventoryApp.Services.ApplicationService.Instance.LocationService;
+                var serviceLocations = locationService.GetLocations();
+                serviceLocations.Clear();
+                foreach (var location in locations)
+                {
+                    serviceLocations.Add(location);
+                }
+                
+                // Save through ApplicationService to ensure proper state management
+                SimpleInventoryApp.Services.ApplicationService.Instance.SaveAllData();
+                
                 UserInterface.SetHasUnsavedChanges(false); // Reset flag
                 UserInterface.UpdateStatus("Data saved successfully.");
-                // Optional: Show a brief confirmation message?
-                // UserInterface.ShowMessage("Save", "Data saved successfully.");
+                Console.WriteLine("DataOperations.SaveData: Data saved successfully");
             }
             catch (Exception ex)
             {
                 UserInterface.ShowMessage("Save Error", $"Failed to save data: {ex.Message}");
                 UserInterface.UpdateStatus("Save data failed.");
+                Console.WriteLine($"DataOperations.SaveData Error: {ex.Message}");
             }
         }
 

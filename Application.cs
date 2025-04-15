@@ -14,6 +14,7 @@ namespace SimpleInventoryApp
     /// </summary>
     public class Application : IObserver
     {
+        private static Application? _instance;
         private readonly ApplicationService _appService;
         private readonly CommandManager _commandManager;
         
@@ -28,6 +29,7 @@ namespace SimpleInventoryApp
         /// </summary>
         public Application()
         {
+            _instance = this;
             _appService = ApplicationService.Instance;
             _commandManager = _appService.CommandManager;
             
@@ -35,6 +37,8 @@ namespace SimpleInventoryApp
             _appService.InventoryService.RegisterObserver(EventType.InventoryChanged, this);
             _appService.LocationService.RegisterObserver(EventType.LocationsChanged, this);
             _appService.ThemeService.RegisterObserver(EventType.ThemeChanged, this);
+            _appService.InventoryService.RegisterObserver(EventType.UnsavedChangesChanged, this);
+            _appService.LocationService.RegisterObserver(EventType.UnsavedChangesChanged, this);
         }
         
         /// <summary>
@@ -71,15 +75,92 @@ namespace SimpleInventoryApp
                 // Show the initial inventory
                 Operations.InventoryOperations.ListAllItems();
                 
+                // Add custom quit handler
+                Terminal.Gui.Application.Top.KeyPress += (e) => {
+                    if (e.KeyEvent.Key == Key.F10)
+                    {
+                        HandleApplicationQuit();
+                        e.Handled = true;
+                    }
+                };
+                
                 // Run the application
                 Terminal.Gui.Application.Run();
                 Terminal.Gui.Application.Shutdown();
                 
-                Console.WriteLine("Inventory saved. Goodbye!");
+                Console.WriteLine("Application closed.");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Handles application quit with proper unsaved changes check
+        /// </summary>
+        public void HandleApplicationQuit()
+        {
+            // Print detailed information about the application state
+            Console.WriteLine("======= APPLICATION QUIT DIAGNOSTICS =======");
+            Console.WriteLine("Checking for unsaved changes...");
+            
+            // Check inventory
+            var inventory = _appService.InventoryService.GetInventory();
+            Console.WriteLine($"Inventory count: {inventory.Count}");
+            Console.WriteLine($"InventoryService.HasUnsavedChanges: {_appService.InventoryService.HasUnsavedChanges}");
+            
+            // Check locations
+            var locations = _appService.LocationService.GetLocations();
+            Console.WriteLine($"Locations count: {locations.Count}");
+            Console.WriteLine($"LocationService.HasUnsavedChanges: {_appService.LocationService.HasUnsavedChanges}");
+            
+            // Check overall application state
+            Console.WriteLine($"ApplicationService.HasUnsavedChanges(): {_appService.HasUnsavedChanges()}");
+            Console.WriteLine($"UserInterface.GetHasUnsavedChanges(): {UI.UserInterface.GetHasUnsavedChanges()}");
+            Console.WriteLine("============================================");
+            
+            // Force AppService to check unsaved changes with the UI
+            bool hasUnsavedChanges = _appService.HasUnsavedChanges() || UI.UserInterface.GetHasUnsavedChanges();
+            
+            if (hasUnsavedChanges)
+            {
+                Console.WriteLine("Exit requested with unsaved changes - showing save dialog");
+                int result = MessageBox.Query(
+                    "Unsaved Changes", 
+                    "There are unsaved changes. Save before quitting?", 
+                    "Save and Quit", 
+                    "Discard and Quit", 
+                    "Cancel"
+                );
+                
+                if (result == 0) // Save and Quit
+                {
+                    Console.WriteLine("Saving data before exit...");
+                    try
+                    {
+                        _appService.SaveAllData();
+                        Console.WriteLine("Data saved successfully.");
+                        Terminal.Gui.Application.RequestStop();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error saving data: {ex.Message}");
+                        UI.UserInterface.ShowMessage("Save Error", $"Failed to save data: {ex.Message}");
+                        // Don't exit if save fails
+                    }
+                }
+                else if (result == 1) // Discard and Quit
+                {
+                    Console.WriteLine("Discarding changes and exiting.");
+                    Terminal.Gui.Application.RequestStop();
+                }
+                // else: Cancel, do nothing
+            }
+            else
+            {
+                Console.WriteLine("No unsaved changes. Exiting application.");
+                Terminal.Gui.Application.RequestStop();
             }
         }
         
@@ -310,6 +391,19 @@ namespace SimpleInventoryApp
                     
                 case EventType.LocationsChanged:
                     // Nothing to do here yet
+                    break;
+                    
+                case EventType.UnsavedChangesChanged:
+                    // Update the status bar to show whether there are unsaved changes
+                    if (data is bool hasUnsavedChanges)
+                    {
+                        Console.WriteLine($"Unsaved changes status changed: {hasUnsavedChanges}");
+                        UI.UserInterface.SetHasUnsavedChanges(hasUnsavedChanges);
+                        
+                        // Update the status message with the current message
+                        string currentStatus = UI.UserInterface.GetCurrentStatusMessage() ?? "Ready";
+                        UI.UserInterface.UpdateStatus(currentStatus);
+                    }
                     break;
                     
                 case EventType.ThemeChanged:

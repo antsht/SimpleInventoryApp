@@ -38,7 +38,7 @@ namespace SimpleInventoryApp.Operations
             dialog.Add(listView);
             
             // Add a "Close" button at the bottom
-            var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
+            var btnContainer = new View() { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
             
             var closeButton = new Button("Close") { X = Pos.Center() };
             closeButton.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
@@ -65,7 +65,7 @@ namespace SimpleInventoryApp.Operations
             dialog.Add(nameLabel, nameText);
             
             // Add buttons
-            var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
+            var btnContainer = new View() { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
             
             var okButton = new Button("OK") { X = Pos.Center() - 10 };
             okButton.Clicked += () => {

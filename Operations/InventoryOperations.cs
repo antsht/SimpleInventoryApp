@@ -607,7 +607,7 @@ namespace SimpleInventoryApp.Operations
             dialog.Add(idLabel, idText);
 
             // Add buttons
-            var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
+            var btnContainer = new View() { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
             
             var deleteButton = new Button("Delete") { X = Pos.Center() - 12 };
             deleteButton.Clicked += () => {
@@ -670,7 +670,7 @@ namespace SimpleInventoryApp.Operations
             dialog.Add(nameLabel, nameText);
 
             // Add buttons
-            var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
+            var btnContainer = new View() { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
             
             var findButton = new Button("Find") { X = Pos.Center() - 10 };
             findButton.Clicked += () => {
@@ -724,7 +724,7 @@ namespace SimpleInventoryApp.Operations
             dialog.Add(invNumLabel, invNumText);
 
             // Add buttons
-            var btnContainer = new View() { X = 0, Y = Pos.Bottom(dialog) - 5, Width = Dim.Fill(), Height = 1 };
+            var btnContainer = new View() { X = 0, Y = Pos.AnchorEnd(1), Width = Dim.Fill(), Height = 1 };
             
             var findButton = new Button("Find") { X = Pos.Center() - 10 };
             findButton.Clicked += () => {

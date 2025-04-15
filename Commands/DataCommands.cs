@@ -41,11 +41,15 @@ namespace SimpleInventoryApp.Commands
         {
             try
             {
+                Console.WriteLine("SaveDataCommand: Initiating save operation...");
                 _appService.SaveAllData();
+                Console.WriteLine("SaveDataCommand: Save operation completed successfully");
                 UI.UserInterface.UpdateStatus("Data saved successfully.");
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"SaveDataCommand Error: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 UI.UserInterface.ShowMessage("Save Error", $"Failed to save data: {ex.Message}");
                 UI.UserInterface.UpdateStatus("Failed to save data.");
             }
@@ -188,7 +192,71 @@ namespace SimpleInventoryApp.Commands
         /// </summary>
         public void Execute()
         {
-            if (_appService.HasUnsavedChanges())
+            // Try to call the Application's HandleApplicationQuit method via reflection
+            try
+            {
+                // First try to find the Application instance
+                var appType = Type.GetType("SimpleInventoryApp.Application, SimpleInventoryApp");
+                if (appType == null)
+                {
+                    // Fallback to direct save dialog
+                    Console.WriteLine("Could not find Application type - falling back to direct save dialog");
+                    ShowSaveConfirmationDialog();
+                    return;
+                }
+                
+                // Try to find the current Application instance
+                var appField = appType.GetField("_instance", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                object? appInstance = null;
+                
+                if (appField != null)
+                {
+                    appInstance = appField.GetValue(null);
+                }
+                
+                if (appInstance == null)
+                {
+                    // If we can't get the instance, use direct save dialog
+                    Console.WriteLine("Could not get Application instance - falling back to direct save dialog");
+                    ShowSaveConfirmationDialog();
+                    return;
+                }
+                
+                // Try to call the HandleApplicationQuit method
+                var method = appType.GetMethod("HandleApplicationQuit", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                if (method != null)
+                {
+                    Console.WriteLine("Found HandleApplicationQuit method - calling it directly");
+                    method.Invoke(appInstance, null);
+                }
+                else
+                {
+                    // If method doesn't exist, use direct save dialog
+                    Console.WriteLine("Could not find HandleApplicationQuit method - falling back to direct save dialog");
+                    ShowSaveConfirmationDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in QuitCommand: {ex.Message}");
+                // Fallback to direct save dialog
+                ShowSaveConfirmationDialog();
+            }
+        }
+        
+        /// <summary>
+        /// Shows a save confirmation dialog if there are unsaved changes
+        /// </summary>
+        private void ShowSaveConfirmationDialog()
+        {
+            Console.WriteLine("QuitCommand: Checking for unsaved changes...");
+            Console.WriteLine($"AppService.HasUnsavedChanges(): {_appService.HasUnsavedChanges()}");
+            Console.WriteLine($"UserInterface.GetHasUnsavedChanges(): {UI.UserInterface.GetHasUnsavedChanges()}");
+            
+            // Check both the AppService and UserInterface
+            bool hasUnsavedChanges = _appService.HasUnsavedChanges() || UI.UserInterface.GetHasUnsavedChanges();
+            
+            if (hasUnsavedChanges)
             {
                 int result = MessageBox.Query(
                     "Unsaved Changes", 
@@ -202,22 +270,27 @@ namespace SimpleInventoryApp.Commands
                 {
                     try
                     {
+                        Console.WriteLine("Saving all data before quitting...");
                         _appService.SaveAllData();
+                        Console.WriteLine("Data saved successfully. Exiting application.");
                         Terminal.Gui.Application.RequestStop();
                     }
                     catch (Exception ex)
                     {
+                        Console.WriteLine($"Error saving data: {ex.Message}");
                         UI.UserInterface.ShowMessage("Save Error", $"Failed to save data: {ex.Message}");
                     }
                 }
                 else if (result == 1) // Discard and Quit
                 {
+                    Console.WriteLine("Discarding changes and exiting application.");
                     Terminal.Gui.Application.RequestStop();
                 }
                 // else: Cancel, do nothing
             }
             else
             {
+                Console.WriteLine("No unsaved changes. Exiting application.");
                 Terminal.Gui.Application.RequestStop();
             }
         }

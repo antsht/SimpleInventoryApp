@@ -13,8 +13,18 @@ namespace SimpleInventoryApp
 
         public DataStorage(string inventoryFile = "inventory.json", string locationsFile = "locations.json") // Add locations filename
         {
-            _inventoryFilePath = Path.Combine(AppContext.BaseDirectory, inventoryFile);
-            _locationsFilePath = Path.Combine(AppContext.BaseDirectory, locationsFile); // Initialize path
+            // Use absolute path for debugging purposes
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            Console.WriteLine($"Base directory: {baseDir}");
+            
+            _inventoryFilePath = Path.Combine(baseDir, inventoryFile);
+            _locationsFilePath = Path.Combine(baseDir, locationsFile);
+            
+            Console.WriteLine($"Inventory file path: {_inventoryFilePath}");
+            Console.WriteLine($"Locations file path: {_locationsFilePath}");
+            
+            // Create directory if it doesn't exist
+            Directory.CreateDirectory(Path.GetDirectoryName(_inventoryFilePath));
         }
 
         // --- Inventory Item Methods (Unchanged) ---
@@ -22,13 +32,20 @@ namespace SimpleInventoryApp
         {
             if (!File.Exists(_inventoryFilePath))
             {
+                Console.WriteLine($"Inventory file does not exist at {_inventoryFilePath}");
                 return new List<InventoryItem>();
             }
             try
             {
                 string jsonString = File.ReadAllText(_inventoryFilePath);
-                if (string.IsNullOrWhiteSpace(jsonString)) return new List<InventoryItem>();
+                if (string.IsNullOrWhiteSpace(jsonString)) 
+                {
+                    Console.WriteLine("Inventory file is empty");
+                    return new List<InventoryItem>();
+                }
+                
                 var items = JsonSerializer.Deserialize<List<InventoryItem>>(jsonString);
+                Console.WriteLine($"Loaded {items?.Count ?? 0} items from inventory file");
                 return items ?? new List<InventoryItem>();
             }
             catch (Exception ex) // Catch broader exceptions for loading
@@ -42,13 +59,24 @@ namespace SimpleInventoryApp
         {
             try
             {
+                Console.WriteLine($"Saving {items.Count} items to {_inventoryFilePath}");
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 string jsonString = JsonSerializer.Serialize(items, options);
+                
+                // Create directory if it doesn't exist (just to be sure)
+                string? directory = Path.GetDirectoryName(_inventoryFilePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                
                 File.WriteAllText(_inventoryFilePath, jsonString);
+                Console.WriteLine($"Items saved successfully to {_inventoryFilePath}");
             }
             catch (Exception ex) // Catch broader exceptions for saving
             {
                 Console.WriteLine($"Error saving inventory to {_inventoryFilePath}: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
             }
         }
 
@@ -64,22 +92,28 @@ namespace SimpleInventoryApp
         {
             if (!File.Exists(_locationsFilePath))
             {
-                // Create a default list if the file doesn't exist
-                // return new List<string> { "Supply Closet", "IT Room", "Reception Desk" };
-                return new List<string>(); // Or just start empty
+                Console.WriteLine($"Locations file does not exist at {_locationsFilePath}");
+                return new List<string>();
             }
 
             try
             {
                 string jsonString = File.ReadAllText(_locationsFilePath);
-                if (string.IsNullOrWhiteSpace(jsonString)) return new List<string>();
+                if (string.IsNullOrWhiteSpace(jsonString))
+                {
+                    Console.WriteLine("Locations file is empty");
+                    return new List<string>();
+                }
+                    
                 // Locations are just a list of strings
                 var locations = JsonSerializer.Deserialize<List<string>>(jsonString);
+                Console.WriteLine($"Loaded {locations?.Count ?? 0} locations from file");
                 return locations ?? new List<string>();
             }
             catch (Exception ex) // Catch broader exceptions
             {
                 Console.WriteLine($"Error loading locations from {_locationsFilePath}: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 // Return an empty list or default list on error
                 return new List<string>();
             }
@@ -89,14 +123,25 @@ namespace SimpleInventoryApp
         {
             try
             {
+                Console.WriteLine($"Saving {locations.Count} locations to {_locationsFilePath}");
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 // Ensure sorting for consistency (optional but nice)
                 string jsonString = JsonSerializer.Serialize(locations.OrderBy(l => l).ToList(), options);
+                
+                // Create directory if it doesn't exist (just to be sure)
+                string? directory = Path.GetDirectoryName(_locationsFilePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                
                 File.WriteAllText(_locationsFilePath, jsonString);
+                Console.WriteLine($"Locations saved successfully to {_locationsFilePath}");
             }
             catch (Exception ex) // Catch broader exceptions
             {
                 Console.WriteLine($"Error saving locations to {_locationsFilePath}: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
             }
         }
     }

@@ -9,6 +9,7 @@ namespace SimpleInventoryApp.UI
     {
         private static Label? statusLabel;
         private static bool hasUnsavedChanges = false;
+        private static string currentStatusMessage = "Ready";
 
         public static void Initialize(Label statusBarLabel)
         {
@@ -25,10 +26,16 @@ namespace SimpleInventoryApp.UI
             return hasUnsavedChanges;
         }
 
+        public static string GetCurrentStatusMessage()
+        {
+            return currentStatusMessage;
+        }
+
         public static void UpdateStatus(string message)
         {
             if (statusLabel != null)
             {
+                currentStatusMessage = message;
                 string fullMessage = message;
                 if (hasUnsavedChanges)
                 {
@@ -54,29 +61,9 @@ namespace SimpleInventoryApp.UI
 
         public static void RequestQuit()
         {
-            if (hasUnsavedChanges)
-            {
-                int result = MessageBox.Query("Unsaved Changes", "There are unsaved changes. Save before quitting?", "Save and Quit", "Discard and Quit", "Cancel");
-                if (result == 0) // Save and Quit
-                {
-                    // Now use the ApplicationService to save data
-                    ApplicationService.Instance.SaveAllData();
-                    if (!hasUnsavedChanges) // Check if save was successful (flag is reset)
-                    {
-                        Terminal.Gui.Application.RequestStop();
-                    }
-                    // else: Save failed, don't quit
-                }
-                else if (result == 1) // Discard and Quit
-                {
-                    Terminal.Gui.Application.RequestStop();
-                }
-                // else if result == 2 (Cancel) or -1 (dialog closed), do nothing
-            }
-            else
-            {
-                Terminal.Gui.Application.RequestStop(); // No unsaved changes, quit directly
-            }
+            // Just request stop - the Application class's RequestStop event handler will handle unsaved changes
+            Console.WriteLine("UserInterface.RequestQuit() called - requesting application stop");
+            Terminal.Gui.Application.RequestStop();
         }
 
         // --- New Method for Help Dialog ---

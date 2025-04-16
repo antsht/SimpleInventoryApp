@@ -263,12 +263,14 @@ namespace SimpleInventoryApp.Operations
                         Terminal.Gui.Application.RequestStop(); // Close dialog after successful import attempt
                         UserInterface.ShowMessage("Import Complete", $"Import process finished from '{Path.GetFileName(filePath)}'. Check table for results.");
                         UserInterface.UpdateStatus("Import process complete.");
+                        Terminal.Gui.Application.MainLoop.Invoke(() => Terminal.Gui.Application.Refresh()); // Force UI refresh
                     }
                     catch (Exception ex)
                     {
                         Terminal.Gui.Application.RequestStop(); // Close dialog even on error
                         UserInterface.ShowMessage("Import Error", $"Failed to import: {ex.Message}");
                         UserInterface.UpdateStatus("Import from CSV failed.");
+                        Terminal.Gui.Application.MainLoop.Invoke(() => Terminal.Gui.Application.Refresh()); // Force UI refresh even on error
                     }
                 }
             };

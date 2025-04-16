@@ -94,7 +94,6 @@ namespace SimpleInventoryApp
                                         {
                                             row.RelativeItem() // Use RelativeItem for flexible distribution if needed, or Item() for fixed size
                                                .Width(LabelWidth, Unit.Inch)
-                                               .Height(LabelHeight, Unit.Inch)
                                                .Border(1, Unit.Point).BorderColor(Colors.Grey.Medium)
                                                .Padding(5, Unit.Point) // Padding inside the label frame
                                                .Column(labelContentCol => // Content within the label arranged vertically
@@ -120,9 +119,9 @@ namespace SimpleInventoryApp
                                         for (int j = 0; j < placeholdersNeeded; j++)
                                         {
                                             // Add an empty item to take up space and keep alignment
-                                            row.RelativeItem().Width(LabelWidth, Unit.Inch).Height(LabelHeight, Unit.Inch);
+                                            row.RelativeItem().Width(LabelWidth, Unit.Inch); 
                                             // Or use row.ConstantItem if RelativeItem causes issues
-                                            // row.ConstantItem(LabelWidth * InchesToPoints).Height(LabelHeight, Unit.Inch);
+                                            // row.ConstantItem(LabelWidth * InchesToPoints); 
                                         }
                                     });
                                 }

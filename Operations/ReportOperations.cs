@@ -97,7 +97,7 @@ namespace SimpleInventoryApp.Operations
                 X = 20,
                 Y = 1,
                 Width = 30,
-                Height = 1,
+                Height = 6, // Increase height to allow dropdown list to show more items
                 ReadOnly = true // Always read-only for this dialog
             };
             

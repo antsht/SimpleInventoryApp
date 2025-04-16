@@ -41,20 +41,17 @@ namespace SimpleInventoryApp.Operations
             var sortColLabel = new Label("Sort By:") { X = 1, Y = 1 };
             var sortCols = new List<string> { "ID", "Inv Num", "Name", "Qty", "Location", "Last Updated" };
             var sortColCombo = new ComboBox() { 
-                X = 15, Y = 1, Width = 20
-                // ReadOnly = true // REMOVED: Test if this prevents dropdown opening
+                X = 15, Y = 1, Width = 20,
+                Height = 5, // Allow dropdown
+                ReadOnly = true
             };
             sortColCombo.SetSource(sortCols);
             sortColCombo.SelectedItem = sortCols.IndexOf(currentSortColumn); // Set current sort
 
-            // Handle KeyDown to open list
-            sortColCombo.KeyPress += (args) => {
-                if (args.KeyEvent.Key == Key.CursorDown) {
-                    // Try invoking the default expand key process (F4)
-                    var f4KeyEvent = new KeyEvent(Key.F4, new KeyModifiers());
-                    sortColCombo.ProcessKey(f4KeyEvent);
-                    // Application.Driver.SendKey(Key.AltMask | Key.CursorDown); // Inconsistent API
-                    args.Handled = true; // Prevent default focus change
+            // Handle ArrowDown to prevent focus change
+            sortColCombo.KeyPress += (e) => {
+                if (e.KeyEvent.Key == Key.CursorDown && !sortColCombo.IsShow && sortColCombo.HasFocus) {
+                    e.Handled = true; 
                 }
             };
 
@@ -195,17 +192,14 @@ namespace SimpleInventoryApp.Operations
                 X = 20, 
                 Y = 9, 
                 Width = 30,
-                Height = 6 // Increase height to show more items + border
-                // ReadOnly = sortedLocations.Count > 0 // Keep commented out for now
+                Height = 6, // Allow dropdown
+                ReadOnly = sortedLocations.Count > 0
             };
 
-            // Handle KeyDown to open list
-            locCombo.KeyPress += (args) => {
-                if (args.KeyEvent.Key == Key.CursorDown) {
-                    // Try invoking the default expand key process (F4)
-                    var f4KeyEvent = new KeyEvent(Key.F4, new KeyModifiers());
-                    locCombo.ProcessKey(f4KeyEvent);
-                    args.Handled = true; // Prevent default focus change
+            // Handle ArrowDown to prevent focus change
+            locCombo.KeyPress += (e) => {
+                if (e.KeyEvent.Key == Key.CursorDown && !locCombo.IsShow && locCombo.HasFocus) {
+                    e.Handled = true; 
                 }
             };
 
@@ -383,19 +377,16 @@ namespace SimpleInventoryApp.Operations
                 X = 20,
                 Y = 9,
                 Width = 30,
-                Height = 6 // Increase height to show more items + border
-                // ReadOnly = sortedLocations.Count > 0 // Keep commented out
+                Height = 6, // Allow dropdown
+                ReadOnly = true
             };
 
             // Auto-open dropdown on focus - REMOVED
 
-            // Handle KeyDown to open list
-            locCombo.KeyPress += (args) => {
-                if (args.KeyEvent.Key == Key.CursorDown) {
-                    // Try invoking the default expand key process (F4)
-                    var f4KeyEvent = new KeyEvent(Key.F4, new KeyModifiers());
-                    locCombo.ProcessKey(f4KeyEvent);
-                    args.Handled = true; // Prevent default focus change
+            // Handle ArrowDown to prevent focus change
+            locCombo.KeyPress += (e) => {
+                if (e.KeyEvent.Key == Key.CursorDown && !locCombo.IsShow && locCombo.HasFocus) {
+                    e.Handled = true; 
                 }
             };
 

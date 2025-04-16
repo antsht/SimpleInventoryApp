@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Terminal.Gui;
 using SimpleInventoryApp.UI;
+using NStack;
 
 namespace SimpleInventoryApp.Operations
 {
@@ -116,7 +117,7 @@ namespace SimpleInventoryApp.Operations
         public static void ExportToCsv()
         {
             // Create a dialog for CSV export
-            var dialog = new Dialog("Export to CSV", 60, 9);
+            var dialog = new Dialog("Export to CSV", 60, 11);
             
             var pathLabel = new Label("Export Path:") { X = 1, Y = 1 };
             var pathText = new TextField(Path.Combine(Environment.CurrentDirectory, "export.csv")) 
@@ -133,7 +134,15 @@ namespace SimpleInventoryApp.Operations
                 Width = Dim.Fill(2) 
             };
             
-            dialog.Add(pathLabel, pathText, helpLabel);
+            // Add checkbox for UTF-8 BOM
+            var bomCheckbox = new CheckBox("Include UTF-8 BOM (helps with Excel/other apps)", true) 
+            { 
+                X = 1, 
+                Y = 5,
+                Width = Dim.Fill(2)
+            };
+            
+            dialog.Add(pathLabel, pathText, helpLabel, bomCheckbox);
             
             // Add buttons using dialog's built-in functionality
             var exportButton = new Button("Export");
@@ -147,8 +156,8 @@ namespace SimpleInventoryApp.Operations
                 
                 try
                 {
-                    // Export the data
-                    csvManager.ExportToCsv(path);
+                    // Export the data with the selected BOM option
+                    csvManager.ExportToCsv(path, bomCheckbox.Checked);
                     Terminal.Gui.Application.RequestStop(); // Close the dialog
                     UserInterface.ShowMessage("Export Complete", $"Export successful to: {path}");
                     UserInterface.UpdateStatus($"Data exported to CSV: {Path.GetFileName(path)}");
@@ -177,7 +186,7 @@ namespace SimpleInventoryApp.Operations
         public static void ImportFromCsv()
         {
             // Create a dialog for CSV import
-            var dialog = new Dialog("Import from CSV", 60, 9);
+            var dialog = new Dialog("Import from CSV", 60, 15);
             
             var pathLabel = new Label("Import Path:") { X = 1, Y = 1 };
             var pathText = new TextField(Path.Combine(Environment.CurrentDirectory, "import.csv")) 
@@ -193,8 +202,27 @@ namespace SimpleInventoryApp.Operations
                 Y = 3, 
                 Width = Dim.Fill(2) 
             };
+
+            // Add radio button group for import type
+            var importTypeFrame = new FrameView("Import Type") 
+            { 
+                X = 1, 
+                Y = 5, 
+                Width = Dim.Fill(2), 
+                Height = 5 
+            };
             
-            dialog.Add(pathLabel, pathText, helpLabel);
+            // Use RadioGroup instead of individual RadioButton controls
+            var importOptions = new ustring[] {
+                "Standard Import",
+                "Enhanced Import (for Cyrillic/UTF-8)"
+            };
+            // Correct constructor for RadioGroup
+            var importTypeRadio = new RadioGroup(importOptions) { X = 1, Y = 0 };
+            importTypeRadio.SelectedItem = 1; // Select the enhanced option by default
+            importTypeFrame.Add(importTypeRadio);
+            
+            dialog.Add(pathLabel, pathText, helpLabel, importTypeFrame);
             
             // Add buttons using dialog's built-in functionality
             var importButton = new Button("Import");
@@ -213,7 +241,17 @@ namespace SimpleInventoryApp.Operations
                 {
                     try
                     {
-                        csvManager.ImportFromCsv(filePath);
+                        // Check the selected item index from RadioGroup
+                        if (importTypeRadio.SelectedItem == 0)
+                        {
+                            // Use standard import
+                            csvManager.ImportFromCsv(filePath);
+                        }
+                        else
+                        {
+                            // Use enhanced import for Cyrillic/international characters
+                            csvManager.ImportFromExternalCsv(filePath);
+                        }
 
                         inventory = dataStorage.LoadItems() ?? new List<InventoryItem>();
                         locations = dataStorage.LoadLocations() ?? new List<string>();

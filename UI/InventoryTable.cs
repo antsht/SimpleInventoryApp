@@ -58,13 +58,13 @@ namespace SimpleInventoryApp.UI
                  ExpandLastColumn = false, 
                  SmoothHorizontalScrolling = true,
                  ColumnStyles = new Dictionary<DataColumn, TableView.ColumnStyle> {
-                     [dataTable.Columns["Location"]] = new TableView.ColumnStyle { MinWidth = 15, MaxWidth = 30, MinAcceptableWidth = 15  }, 
-                     [dataTable.Columns["Inv Num"]] = new TableView.ColumnStyle { MinWidth = 10, MaxWidth = 20 }, 
-                     [dataTable.Columns["Name"]] = new TableView.ColumnStyle { MinWidth = 10, MaxWidth = 80, MinAcceptableWidth = 30 }, 
-                     [dataTable.Columns["Description"]] = new TableView.ColumnStyle { MinWidth = 10, MaxWidth = 30}, 
-                     [dataTable.Columns["Qty"]] = new TableView.ColumnStyle { MinWidth = 3, MaxWidth = 5 },
-                     [dataTable.Columns["Last Updated"]] = new TableView.ColumnStyle { MinWidth = 14, MaxWidth = 16 },
-                     [dataTable.Columns["ID"]] = new TableView.ColumnStyle { MinWidth = 4, MaxWidth = 6 },
+                     [dataTable.Columns["Location"]!] = new TableView.ColumnStyle { MinWidth = 15, MaxWidth = 30, MinAcceptableWidth = 15  }, 
+                     [dataTable.Columns["Inv Num"]!] = new TableView.ColumnStyle { MinWidth = 10, MaxWidth = 20 }, 
+                     [dataTable.Columns["Name"]!] = new TableView.ColumnStyle { MinWidth = 10, MaxWidth = 80, MinAcceptableWidth = 30 }, 
+                     [dataTable.Columns["Description"]!] = new TableView.ColumnStyle { MinWidth = 10, MaxWidth = 30}, 
+                     [dataTable.Columns["Qty"]!] = new TableView.ColumnStyle { MinWidth = 3, MaxWidth = 5 },
+                     [dataTable.Columns["Last Updated"]!] = new TableView.ColumnStyle { MinWidth = 14, MaxWidth = 16 },
+                     [dataTable.Columns["ID"]!] = new TableView.ColumnStyle { MinWidth = 4, MaxWidth = 6 },
                  }
             };
             inventoryTableView.Style = tableStyle;

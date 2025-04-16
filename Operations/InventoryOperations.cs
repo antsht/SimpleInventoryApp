@@ -285,7 +285,7 @@ namespace SimpleInventoryApp.Operations
 
                 // --- Location Handling ---
                 string finalLocation = "Default";
-                string enteredLocation = locCombo.Text?.ToString().Trim() ?? string.Empty;
+                string enteredLocation = locCombo.Text?.ToString()?.Trim() ?? string.Empty;
 
                 // Check if text was entered and if it's different from the selected item (if any)
                 if (!string.IsNullOrWhiteSpace(enteredLocation))
@@ -486,7 +486,7 @@ namespace SimpleInventoryApp.Operations
 
                 // --- Location Handling ---
                 string finalLocation = "Default";
-                string enteredLocation = locCombo.Text?.ToString().Trim() ?? string.Empty;
+                string enteredLocation = locCombo.Text?.ToString()?.Trim() ?? string.Empty;
                 bool locationChanged = false; // Flag to check if location needs update
 
                 // Check if text was entered and if it's different from the original

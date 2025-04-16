@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics; // Required for Process
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -13,9 +14,14 @@ namespace SimpleInventoryApp
 
         public DataStorage(string inventoryFile = "inventory.json", string locationsFile = "locations.json") // Add locations filename
         {
-            // Use absolute path for debugging purposes
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            Console.WriteLine($"Base directory: {baseDir}");
+            // Get the directory of the currently running executable
+            string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? AppDomain.CurrentDomain.BaseDirectory;
+            string baseDir = Path.GetDirectoryName(exePath) ?? AppDomain.CurrentDomain.BaseDirectory;
+
+            // If running in debug/dev environment, the path might be in bin/Debug/netX.Y
+            // Consider adjusting the path if needed for development vs published scenarios,
+            // but for published EXE, this baseDir should be correct.
+            Console.WriteLine($"Using base directory for data: {baseDir}");
             
             _inventoryFilePath = Path.Combine(baseDir, inventoryFile);
             _locationsFilePath = Path.Combine(baseDir, locationsFile);
@@ -23,8 +29,19 @@ namespace SimpleInventoryApp
             Console.WriteLine($"Inventory file path: {_inventoryFilePath}");
             Console.WriteLine($"Locations file path: {_locationsFilePath}");
             
-            // Create directory if it doesn't exist
-            Directory.CreateDirectory(Path.GetDirectoryName(_inventoryFilePath));
+            // Ensure the directory exists (important for first run of published app)
+            try 
+            {
+                if (!string.IsNullOrEmpty(baseDir))
+                {
+                    Directory.CreateDirectory(baseDir);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating data directory '{baseDir}': {ex.Message}");
+                // Optionally handle this error more gracefully, e.g., disable saving/loading
+            }
         }
 
         // --- Inventory Item Methods (Unchanged) ---

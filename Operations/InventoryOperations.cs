@@ -17,9 +17,10 @@ namespace SimpleInventoryApp.Operations
         private static DataStorage dataStorage = null!;
         
         // --- Sort/Filter State ---
-        private static string currentSortColumn = "ID"; // Default sort
+        private static string currentSortColumn = "Location"; // Default sort changed to Location
         private static bool sortAscending = true; 
         private static string currentFilterText = string.Empty;
+        private static string currentLocationFilter = "All Locations"; // New state variable for location filter
         // -------------------------
         
         public static void Initialize(List<InventoryItem> inventoryItems, List<string> locationItems, DataStorage storage)
@@ -35,7 +36,7 @@ namespace SimpleInventoryApp.Operations
         // --- New Method for Sort/Filter Dialog ---
         public static void ShowSortFilterDialog()
         {
-            var dialog = new Dialog("Sort & Filter Inventory", 65, 15);
+            var dialog = new Dialog("Sort & Filter Inventory", 65, 18); // Increased height for new controls
 
             // Sort Column Selection
             var sortColLabel = new Label("Sort By:") { X = 1, Y = 1 };
@@ -46,9 +47,10 @@ namespace SimpleInventoryApp.Operations
                 ReadOnly = true
             };
             sortColCombo.SetSource(sortCols);
-            sortColCombo.SelectedItem = sortCols.IndexOf(currentSortColumn); // Set current sort
+            // Ensure default selection matches the updated static variable
+            sortColCombo.SelectedItem = sortCols.IndexOf(currentSortColumn);
 
-            // Handle ArrowDown to prevent focus change
+            // Handle ArrowDown to prevent focus change for Sort ComboBox
             sortColCombo.KeyPress += (e) => {
                 if (e.KeyEvent.Key == Key.CursorDown && !sortColCombo.IsShow && sortColCombo.HasFocus) {
                     e.Handled = true; 
@@ -63,12 +65,35 @@ namespace SimpleInventoryApp.Operations
             };
             sortDirRadio.SelectedItem = sortAscending ? 0 : 1;
             
+            // ---- New Location Filter ----
+            var locFilterLabel = new Label("Filter Location:") { X = 1, Y = 4 }; // Adjusted Y
+            var locFilterCombo = new ComboBox() {
+                X = 15, Y = 4, Width = 40, // Adjusted Y
+                Height = 5, // Allow dropdown
+                ReadOnly = true
+            };
+            // Prepare location list with "All" option
+            var filterLocations = new List<string> { "All Locations" };
+            filterLocations.AddRange(locations.OrderBy(l => l)); // Add sorted existing locations
+            locFilterCombo.SetSource(filterLocations);
+            // Set current selection
+            int currentLocIndex = filterLocations.IndexOf(currentLocationFilter);
+            locFilterCombo.SelectedItem = currentLocIndex >= 0 ? currentLocIndex : 0; 
+
+            // Handle ArrowDown to prevent focus change for Location ComboBox
+            locFilterCombo.KeyPress += (e) => {
+                if (e.KeyEvent.Key == Key.CursorDown && !locFilterCombo.IsShow && locFilterCombo.HasFocus) {
+                    e.Handled = true; 
+                }
+            };
+            // ---- End New Location Filter ----
+
             // Filter Text
-            var filterLabel = new Label("Filter Text:") { X = 1, Y = 5 };
-            var filterText = new TextField(currentFilterText) { X = 15, Y = 5, Width = 40 };
-            var filterHelp = new Label("(Filters Name, Inv Num, Desc, Location)") {
-                 X = 15, Y = 6,
-                 ColorScheme = Colors.Error // Use the built-in Error color scheme for help text
+            var filterLabel = new Label("Filter Text:") { X = 1, Y = 7 }; // Adjusted Y
+            var filterText = new TextField(currentFilterText) { X = 15, Y = 7, Width = 40 }; // Adjusted Y
+            var filterHelp = new Label("(Filters Name, Inv Num, Desc)") { // Updated help text
+                 X = 15, Y = 8, // Adjusted Y
+                 ColorScheme = Colors.Error 
             };
 
             // Apply Button
@@ -77,6 +102,8 @@ namespace SimpleInventoryApp.Operations
                 currentSortColumn = sortCols[sortColCombo.SelectedItem];
                 sortAscending = sortDirRadio.SelectedItem == 0;
                 currentFilterText = filterText.Text?.ToString() ?? string.Empty;
+                // Get selected location filter
+                currentLocationFilter = filterLocations[locFilterCombo.SelectedItem];
                 
                 InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Apply and refresh
                 UserInterface.UpdateStatus("Sort/Filter applied.");
@@ -87,7 +114,10 @@ namespace SimpleInventoryApp.Operations
             var clearBtn = new Button("Clear Filter");
             clearBtn.Clicked += () => {
                 currentFilterText = string.Empty;
-                filterText.Text = string.Empty; // Clear the text field in the dialog too
+                filterText.Text = string.Empty;
+                currentLocationFilter = "All Locations"; // Reset location filter
+                locFilterCombo.SelectedItem = 0; // Reset location combo selection
+                
                 // Keep current sort order when clearing filter
                 InventoryTable.PopulateInventoryTable(ApplySortAndFilter()); // Apply and refresh
                 UserInterface.UpdateStatus("Filter cleared.");
@@ -98,32 +128,42 @@ namespace SimpleInventoryApp.Operations
             var cancelBtn = new Button("Cancel");
             cancelBtn.Clicked += () => { Terminal.Gui.Application.RequestStop(); };
 
-            dialog.Add(sortColLabel, sortColCombo, sortDirLabel, sortDirRadio, filterLabel, filterText, filterHelp);
+            dialog.Add(sortColLabel, sortColCombo, sortDirLabel, sortDirRadio, 
+                       locFilterLabel, locFilterCombo, // Add new location controls
+                       filterLabel, filterText, filterHelp);
             dialog.AddButton(cancelBtn);
             dialog.AddButton(clearBtn);
             dialog.AddButton(applyBtn);
 
             dialog.FocusFirst();
-            sortColCombo.SetFocus(); // Change focus to Sort By combo box initially
-            // filterText.SetFocus(); // OLD: Start with filter text field focused
+            sortColCombo.SetFocus(); // Keep focus on Sort By combo box initially
             Terminal.Gui.Application.Run(dialog);
         }
 
         // --- New Method to Apply Current Sort/Filter --- 
         public static List<InventoryItem> ApplySortAndFilter()
         {
-            string filterText = string.IsNullOrWhiteSpace(currentFilterText) ? "" : currentFilterText.ToLower();
+            string filterTextLower = string.IsNullOrWhiteSpace(currentFilterText) ? "" : currentFilterText.ToLowerInvariant();
             string sortColumn = string.IsNullOrWhiteSpace(currentSortColumn) ? "Location" : currentSortColumn;
             IEnumerable<InventoryItem> query = inventory;
 
-            // Apply Filter
-            if (!string.IsNullOrWhiteSpace(filterText))
+            // Apply Location Filter (if not "All Locations")
+            if (currentLocationFilter != "All Locations")
             {
                 query = query.Where(item => 
-                    (item.Name?.ToLowerInvariant().Contains(filterText) ?? false) ||
-                    (item.InventoryNumber?.ToLowerInvariant().Contains(filterText) ?? false) ||
-                    (item.Description?.ToLowerInvariant().Contains(filterText) ?? false) ||
-                    (item.Location?.ToLowerInvariant().Contains(filterText) ?? false)
+                    item.Location != null && 
+                    item.Location.Equals(currentLocationFilter, StringComparison.OrdinalIgnoreCase)
+                );
+            }
+
+            // Apply Text Filter
+            if (!string.IsNullOrWhiteSpace(filterTextLower))
+            {
+                query = query.Where(item => 
+                    (item.Name?.ToLowerInvariant().Contains(filterTextLower) ?? false) ||
+                    (item.InventoryNumber?.ToLowerInvariant().Contains(filterTextLower) ?? false) ||
+                    (item.Description?.ToLowerInvariant().Contains(filterTextLower) ?? false)
+                    // Removed Location from text filter as it's handled separately now
                 );
             }
 
